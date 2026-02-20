@@ -43,7 +43,7 @@ namespace Vod2Tube.Application
             return output;
         }
 
-        static double ParseFps(string fpsStr)
+        internal static double ParseFps(string fpsStr)
         {
             if (fpsStr.Contains("/"))
             {
