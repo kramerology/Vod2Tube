@@ -1,0 +1,371 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Net;
+using System.Net.Http;
+using System.Text;
+using System.Threading.Tasks;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+
+namespace Vod2Tube.Application
+{
+    /// <summary>
+    /// Represents a single archived VOD.
+    /// </summary>
+    public class TwitchVod
+    {
+        public string Id { get; set; }
+        public string Title { get; set; }
+        public DateTime PublishedAt { get; set; }
+        public int LengthSeconds { get; set; }
+        public string Url { get; set; }
+        public Game Game { get; set; }
+
+        public List<VideoMoment> Moments { get; set; } = new List<VideoMoment>();
+
+        public override string ToString()
+        {
+            return Title;
+        }
+    }
+
+    /// <summary>
+    /// Fetches all archived VODs for a given channel via Twitch's persisted GraphQL query.
+    /// </summary>
+    public class TwitchGraphQLService
+    {
+        private const string GqlEndpoint = "https://gql.twitch.tv/gql";
+        private const string PersistedQueryHash = "2023a089fca2860c46dcdeb37b2ab2b60899b52cca1bfa4e720b260216ec2dc6";
+        private readonly HttpClient _http;
+        private const int BatchSize = 100;
+
+        public TwitchGraphQLService()
+        {
+            _http = new HttpClient();
+            _http.DefaultRequestHeaders.Add("Client-ID", "kimne78kx3ncx6brgo4mv6wki5h1ko");
+            _http.DefaultRequestHeaders.Add("Accept", "application/json");
+        }
+
+        /// <summary>
+        /// Pages through and returns every ARCHIVE-type VOD for <paramref name="channelLogin"/>.
+        /// </summary>
+        /// <param name="channelLogin">e.g. "ninja"</param>
+        /// <param name="pageSize">Max 100</param>
+        public async Task<List<TwitchVod>> GetAllVodsAsync(string channelLogin, int pageSize = 100)
+        {
+            if (string.IsNullOrWhiteSpace(channelLogin))
+                throw new ArgumentException("Channel login is required", nameof(channelLogin));
+            if (pageSize < 1 || pageSize > 100)
+                throw new ArgumentOutOfRangeException(nameof(pageSize), "Must be between 1 and 100");
+
+            var result = new List<TwitchVod>();
+            string cursor = null;
+            bool hasNext;
+
+            do
+            {
+                var page = await QueryPageAsync(channelLogin, pageSize, cursor);
+
+                foreach (var edge in page.Edges)
+                {
+                    var n = edge.Node;
+                    result.Add(new TwitchVod
+                    {
+                        Id = n.Id,
+                        Title = n.Title,
+                        PublishedAt = n.PublishedAt,
+                        LengthSeconds = n.LengthSeconds,
+                        Url = $"https://www.twitch.tv/videos/{n.Id}",
+                        Game = edge.Node.Game                     
+                    });
+                }
+
+                hasNext = page.PageInfo.HasNextPage;
+                cursor = page.PageInfo.EndCursor;
+                await Task.Delay(500);
+            }
+            while (hasNext);
+
+            await PopulateVodMomentsAsync(result);
+
+            return result;
+        }
+
+        private async Task<VideosConnection> QueryPageAsync(string login, int limit, string cursor)
+        {
+            // Use Twitch's persisted query rather than declaring our own GraphQL string.
+            var bodyObj = new[]
+            {
+                new
+                {
+                    operationName = "FilterableVideoTower_Videos",
+                    variables     = new {
+                        limit,
+                        channelOwnerLogin = login,
+                        broadcastType     = (object)null,   // fetch archives
+                        videoSort         = "TIME",
+                        cursor
+                    },
+                    extensions    = new {
+                        persistedQuery = new {
+                            version    = 1,
+                            sha256Hash = PersistedQueryHash
+                        }
+                    }
+                }
+            };
+
+            var json = JsonConvert.SerializeObject(bodyObj);
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+            var resp = await _http.PostAsync(GqlEndpoint, content);
+            resp.EnsureSuccessStatusCode();
+
+            var raw = await resp.Content.ReadAsStringAsync();
+            // Response is a JSON array; the first element contains our data
+            var arr = JArray.Parse(raw);
+            var vidsToken = arr[0]["data"]["user"]["videos"];
+
+            return vidsToken.ToObject<VideosConnection>();
+        }
+
+        public async Task PopulateVodMomentsAsync(List<TwitchVod> vods)
+        {
+            string OperationName = "VideoPreviewCard__VideoMoments";
+            string Sha256Hash = "7399051b2d46f528d5f0eedf8b0db8d485bb1bb4c0a2c6707be6f1290cdcb31a";
+            int batchSize = 35; //Max allowed from testing
+
+            if (vods == null || vods.Count == 0)
+                return;
+
+            int numPopulated = 0;
+
+            do
+            {
+                var batch = vods.Skip(numPopulated).Take(batchSize).Select(v => new PersistedQueryRequest
+                {
+                    OperationName = OperationName,
+                    Variables = new RequestVariables { VideoId = v.Id },
+                    Extensions = new RequestExtensions
+                    {
+                        PersistedQuery = new PersistedQueryInfo
+                        {
+                            Version = 1,
+                            Sha256Hash = Sha256Hash
+                        }
+                    }
+                }).ToList();
+
+                string s = JsonConvert.SerializeObject(batch);
+
+                var content = new StringContent(JsonConvert.SerializeObject(batch), Encoding.UTF8, "application/json");
+                var response = await _http.PostAsync(GqlEndpoint, content);
+                response.EnsureSuccessStatusCode();
+
+                var json = await response.Content.ReadAsStringAsync();
+                var results = JsonConvert.DeserializeObject<List<BatchResponseItem>>(json);
+                if (results == null)
+                    return;
+
+                // Map returned moments to the corresponding TwitchVod
+                foreach (var item in results)
+                {
+                    var videoData = item.Data?.Video;
+                    if (videoData == null)
+                        continue;
+
+                    var vod = vods.FirstOrDefault(v => v.Id == videoData.Id);
+                    if (vod == null)
+                        continue;
+
+                    vod.Moments = videoData.Moments.Edges
+                        .Select(e => new VideoMoment
+                        {
+                            Id = e.Node.Id,
+                            DurationMilliseconds = e.Node.DurationMilliseconds,
+                            PositionMilliseconds = e.Node.PositionMilliseconds,
+                            Type = e.Node.Type,
+                            Description = e.Node.Description,
+                            ThumbnailUrl = e.Node.ThumbnailURL,
+                            Details = e.Node.Details.Typename == "GameChangeMomentDetails"
+                                ? new GameChangeMomentDetails { Game = e.Node.Details.Game }
+                                : null
+                        })
+                        .ToList();
+                }
+
+                numPopulated += batch.Count;
+
+                await Task.Delay(500);
+            } while (numPopulated < vods.Count);
+
+ 
+            foreach(var vod in vods)
+            {
+                vod.Moments = vod.Moments.OrderBy(v => v.PositionMilliseconds).ToList();
+            }
+
+         
+        }
+    }
+
+    public class VideoMoment
+    {
+        public string Id { get; set; }
+        public long DurationMilliseconds { get; set; }
+        public long PositionMilliseconds { get; set; }
+        public string Type { get; set; }
+        public string Description { get; set; }
+        public string ThumbnailUrl { get; set; }
+        public MomentDetails Details { get; set; }
+    }
+
+    public abstract class MomentDetails { }
+
+    public class GameChangeMomentDetails : MomentDetails
+    {
+        public Game Game { get; set; }
+    }
+
+    public class Game
+    {
+        public string Id { get; set; }
+        public string Slug { get; set; }
+        public string DisplayName { get; set; }
+        public string BoxArtUrl { get; set; }
+    }
+
+    // GraphQL persisted query request shape
+    internal class PersistedQueryRequest
+    {
+        [JsonProperty("operationName")]
+        public string OperationName { get; set; }
+
+        [JsonProperty("variables")]
+        public RequestVariables Variables { get; set; }
+
+        [JsonProperty("extensions")]
+        public RequestExtensions Extensions { get; set; }
+    }
+
+    internal class RequestVariables
+    {
+        [JsonProperty("videoId")]
+        public string VideoId { get; set; }
+    }
+
+    internal class RequestExtensions
+    {
+        [JsonProperty("persistedQuery")]
+        public PersistedQueryInfo PersistedQuery { get; set; }
+    }
+
+    internal class PersistedQueryInfo
+    {
+        [JsonProperty("version")]
+        public int Version { get; set; }
+
+        [JsonProperty("sha256Hash")]
+        public string Sha256Hash { get; set; }
+    }
+
+    // Batch response item shape
+    internal class BatchResponseItem
+    {
+        [JsonProperty("data")]
+        public BatchData Data { get; set; }
+    }
+
+    internal class BatchData
+    {
+        [JsonProperty("video")]
+        public VideoData Video { get; set; }
+    }
+
+    internal class VideoData
+    {
+        [JsonProperty("id")]
+        public string Id { get; set; }
+
+        [JsonProperty("moments")]
+        public MomentConnection Moments { get; set; }
+    }
+
+    internal class MomentConnection
+    {
+        [JsonProperty("edges")]
+        public List<MomentEdge> Edges { get; set; }
+    }
+
+    internal class MomentEdge
+    {
+        [JsonProperty("node")]
+        public MomentNode Node { get; set; }
+    }
+
+    internal class MomentNode
+    {
+        [JsonProperty("id")]
+        public string Id { get; set; }
+
+        [JsonProperty("durationMilliseconds")]
+        public long DurationMilliseconds { get; set; }
+
+        [JsonProperty("positionMilliseconds")]
+        public long PositionMilliseconds { get; set; }
+
+        [JsonProperty("type")]
+        public string Type { get; set; }
+
+        [JsonProperty("description")]
+        public string Description { get; set; }
+
+        [JsonProperty("thumbnailURL")]
+        public string ThumbnailURL { get; set; }
+
+        [JsonProperty("details")]
+        public MomentDetailsRaw Details { get; set; }
+    }
+
+    internal class MomentDetailsRaw
+    {
+        [JsonProperty("__typename")]
+        public string Typename { get; set; }
+
+        [JsonProperty("game")]
+        public Game Game { get; set; }
+    }
+
+
+    #region GraphQL paging types (internal)
+
+    internal class VideosConnection
+    {
+        [JsonProperty("edges")] public List<VideoEdge> Edges { get; set; }
+        [JsonProperty("pageInfo")] public PageInfo PageInfo { get; set; }
+    }
+
+    internal class VideoEdge
+    {
+        [JsonProperty("cursor")] public string Cursor { get; set; }
+        [JsonProperty("node")] public VideoNode Node { get; set; }
+    }
+
+    internal class VideoNode
+    {
+        [JsonProperty("id")] public string Id { get; set; }
+        [JsonProperty("title")] public string Title { get; set; }
+        [JsonProperty("publishedAt")] public DateTime PublishedAt { get; set; }
+        [JsonProperty("lengthSeconds")] public int LengthSeconds { get; set; }
+        [JsonProperty("game")] public Game Game { get; set; }
+    }
+
+
+
+    internal class PageInfo
+    {
+        [JsonProperty("hasNextPage")] public bool HasNextPage { get; set; }
+        [JsonProperty("endCursor")] public string EndCursor { get; set; }
+    }
+
+    #endregion
+}
