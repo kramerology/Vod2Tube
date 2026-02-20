@@ -1,12 +1,17 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace Vod2Tube.Application.PipelineWorkers
+namespace Vod2Tube.Application
 {
-    internal class FinalRenderer
+    public class FinalRenderer
     {
+        private static readonly DirectoryInfo FinalDir = new("FinalVideos");
+
+        public string GetOutputPath(string vodId) =>
+            Path.Combine(FinalDir.FullName, $"{vodId}_final.mp4");
+
+        public async IAsyncEnumerable<string> RunAsync(string vodId, string vodFilePath, string chatVideoFilePath,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+        {
+            // TODO: implement combining logic
+            yield break;
+        }
     }
 }

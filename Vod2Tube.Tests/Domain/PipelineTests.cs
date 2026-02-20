@@ -70,15 +70,16 @@ public class PipelineTests
     /// </summary>
     [Test]
     [Arguments("Pending")]
-    [Arguments("Downloading")]
-    [Arguments("VodDownloaded")]
-    [Arguments("ChatDownloading")]
-    [Arguments("ChatDownloaded")]
+    [Arguments("DownloadingVod")]
+    [Arguments("PendingDownloadChat")]
+    [Arguments("DownloadingChat")]
+    [Arguments("PendingRenderingChat")]
     [Arguments("RenderingChat")]
-    [Arguments("ChatRendered")]
+    [Arguments("PendingCombining")]
     [Arguments("Combining")]
+    [Arguments("PendingUpload")]
     [Arguments("Uploading")]
-    [Arguments("Done")]
+    [Arguments("Uploaded")]
     public async Task Pipeline_Stage_AcceptsKnownStageValue(string stage)
     {
         var pipeline = new Pipeline { Stage = stage };
