@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Net;
 using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
@@ -30,14 +29,69 @@ namespace Vod2Tube.Application
     }
 
     /// <summary>
-    /// Fetches all archived VODs for a given channel via Twitch's persisted GraphQL query.
+    /// Fetches all archived VODs for a given channel via Twitch's GraphQL endpoint.
     /// </summary>
     public class TwitchGraphQLService
     {
         private const string GqlEndpoint = "https://gql.twitch.tv/gql";
-        private const string PersistedQueryHash = "2023a089fca2860c46dcdeb37b2ab2b60899b52cca1bfa4e720b260216ec2dc6";
         private readonly HttpClient _http;
-        private const int BatchSize = 100;
+
+        private const string VodsQuery = @"
+query ChannelVideos($login: String!, $first: Int!, $after: String, $types: [BroadcastType!]) {
+  user(login: $login) {
+    videos(first: $first, after: $after, types: $types, sort: TIME) {
+      edges {
+        cursor
+        node {
+          id
+          title
+          publishedAt
+          lengthSeconds
+          game {
+            id
+            slug
+            displayName
+            boxArtURL
+          }
+        }
+      }
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+    }
+  }
+}";
+
+        private const string MomentsQuery = @"
+query VideoMoments($videoId: ID!) {
+  video(id: $videoId) {
+    id
+    moments(momentRequestType: VIDEO_CHAPTER_MARKERS) {
+      edges {
+        node {
+          id
+          durationMilliseconds
+          positionMilliseconds
+          type
+          description
+          thumbnailURL
+          details {
+            __typename
+            ... on GameChangeMomentDetails {
+              game {
+                id
+                slug
+                displayName
+                boxArtURL
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}";
 
         public TwitchGraphQLService()
         {
@@ -93,25 +147,15 @@ namespace Vod2Tube.Application
 
         private async Task<VideosConnection> QueryPageAsync(string login, int limit, string cursor)
         {
-            // Use Twitch's persisted query rather than declaring our own GraphQL string.
-            var bodyObj = new[]
+            var bodyObj = new
             {
-                new
+                query     = VodsQuery,
+                variables = new
                 {
-                    operationName = "FilterableVideoTower_Videos",
-                    variables     = new {
-                        limit,
-                        channelOwnerLogin = login,
-                        broadcastType     = (object)null,   // fetch archives
-                        videoSort         = "TIME",
-                        cursor
-                    },
-                    extensions    = new {
-                        persistedQuery = new {
-                            version    = 1,
-                            sha256Hash = PersistedQueryHash
-                        }
-                    }
+                    login = login,
+                    first = limit,
+                    after = cursor,
+                    types = new[] { "ARCHIVE" }
                 }
             };
 
@@ -121,17 +165,16 @@ namespace Vod2Tube.Application
             resp.EnsureSuccessStatusCode();
 
             var raw = await resp.Content.ReadAsStringAsync();
-            // Response is a JSON array; the first element contains our data
-            var arr = JArray.Parse(raw);
-            var vidsToken = arr[0]["data"]["user"]["videos"];
+            var obj = JObject.Parse(raw);
+            var userToken = obj["data"]?["user"]
+                ?? throw new InvalidOperationException($"Channel '{login}' not found.");
+            var vidsToken = userToken["videos"];
 
             return vidsToken.ToObject<VideosConnection>();
         }
 
         public async Task PopulateVodMomentsAsync(List<TwitchVod> vods)
         {
-            string OperationName = "VideoPreviewCard__VideoMoments";
-            string Sha256Hash = "7399051b2d46f528d5f0eedf8b0db8d485bb1bb4c0a2c6707be6f1290cdcb31a";
             int batchSize = 35; //Max allowed from testing
 
             if (vods == null || vods.Count == 0)
@@ -141,21 +184,11 @@ namespace Vod2Tube.Application
 
             do
             {
-                var batch = vods.Skip(numPopulated).Take(batchSize).Select(v => new PersistedQueryRequest
+                var batch = vods.Skip(numPopulated).Take(batchSize).Select(v => new
                 {
-                    OperationName = OperationName,
-                    Variables = new RequestVariables { VideoId = v.Id },
-                    Extensions = new RequestExtensions
-                    {
-                        PersistedQuery = new PersistedQueryInfo
-                        {
-                            Version = 1,
-                            Sha256Hash = Sha256Hash
-                        }
-                    }
+                    query     = MomentsQuery,
+                    variables = new { videoId = v.Id }
                 }).ToList();
-
-                string s = JsonConvert.SerializeObject(batch);
 
                 var content = new StringContent(JsonConvert.SerializeObject(batch), Encoding.UTF8, "application/json");
                 var response = await _http.PostAsync(GqlEndpoint, content);
@@ -232,40 +265,6 @@ namespace Vod2Tube.Application
         public string Slug { get; set; }
         public string DisplayName { get; set; }
         public string BoxArtUrl { get; set; }
-    }
-
-    // GraphQL persisted query request shape
-    internal class PersistedQueryRequest
-    {
-        [JsonProperty("operationName")]
-        public string OperationName { get; set; }
-
-        [JsonProperty("variables")]
-        public RequestVariables Variables { get; set; }
-
-        [JsonProperty("extensions")]
-        public RequestExtensions Extensions { get; set; }
-    }
-
-    internal class RequestVariables
-    {
-        [JsonProperty("videoId")]
-        public string VideoId { get; set; }
-    }
-
-    internal class RequestExtensions
-    {
-        [JsonProperty("persistedQuery")]
-        public PersistedQueryInfo PersistedQuery { get; set; }
-    }
-
-    internal class PersistedQueryInfo
-    {
-        [JsonProperty("version")]
-        public int Version { get; set; }
-
-        [JsonProperty("sha256Hash")]
-        public string Sha256Hash { get; set; }
     }
 
     // Batch response item shape
