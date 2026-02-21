@@ -217,6 +217,16 @@ query VideoMoments($videoId: ID!) {
                 // Map returned moments to the corresponding TwitchVod
                 foreach (var item in results)
                 {
+                    // Skip items with GraphQL errors, logging the error message
+                    if (item.Errors != null && item.Errors.Count > 0)
+                    {
+                        foreach (var error in item.Errors)
+                        {
+                            Console.Error.WriteLine($"GraphQL error fetching moments: {error.Message ?? "Unknown GraphQL error"}");
+                        }
+                        continue;
+                    }
+
                     var videoData = item.Data?.Video;
                     if (videoData == null)
                         continue;
@@ -276,9 +286,16 @@ query VideoMoments($videoId: ID!) {
 
     public class Game
     {
+        [JsonProperty("id")]
         public string Id { get; set; } = string.Empty;
+
+        [JsonProperty("slug")]
         public string Slug { get; set; } = string.Empty;
+
+        [JsonProperty("displayName")]
         public string DisplayName { get; set; } = string.Empty;
+
+        [JsonProperty("boxArtURL")]
         public string BoxArtUrl { get; set; } = string.Empty;
     }
 
@@ -287,6 +304,15 @@ query VideoMoments($videoId: ID!) {
     {
         [JsonProperty("data")]
         public BatchData? Data { get; set; }
+
+        [JsonProperty("errors")]
+        public List<GraphQLError>? Errors { get; set; }
+    }
+
+    internal class GraphQLError
+    {
+        [JsonProperty("message")]
+        public string? Message { get; set; }
     }
 
     internal class BatchData

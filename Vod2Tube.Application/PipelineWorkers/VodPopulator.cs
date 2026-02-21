@@ -31,7 +31,7 @@ namespace Vod2Tube.Application
 
                     await dbContext.Database.EnsureCreatedAsync();
 
-                    List<string> channelNames = ["itswill"];
+                    List<string> channelNames = ["test"];
 
                     foreach (string channel in channelNames)
                     {
