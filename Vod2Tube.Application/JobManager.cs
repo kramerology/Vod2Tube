@@ -55,7 +55,7 @@ namespace Vod2Tube.Application
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"Error in JobManager: {ex.Message}");
+                    Console.WriteLine($"Error in JobManager: {ex}");
                     await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
                 }
             }
@@ -63,16 +63,20 @@ namespace Vod2Tube.Application
 
         internal static async Task<Pipeline?> FindHighestPriorityJobAsync(AppDbContext dbContext, CancellationToken ct)
         {
-            // Walk from highest priority (furthest along) to lowest
-            for (int i = StagePriority.Length - 1; i >= 0; i--)
-            {
-                var job = await dbContext.Pipelines
-                    .Where(p => p.Stage == StagePriority[i])
-                    .FirstOrDefaultAsync(ct);
-                if (job != null)
-                    return job;
-            }
-            return null;
+            return await dbContext.Pipelines
+                .Where(p => StagePriority.Contains(p.Stage))
+                .OrderByDescending(p =>
+                    p.Stage == "Uploading"            ? 9 :
+                    p.Stage == "PendingUpload"        ? 8 :
+                    p.Stage == "Combining"            ? 7 :
+                    p.Stage == "PendingCombining"     ? 6 :
+                    p.Stage == "RenderingChat"        ? 5 :
+                    p.Stage == "PendingRenderingChat" ? 4 :
+                    p.Stage == "DownloadingChat"      ? 3 :
+                    p.Stage == "PendingDownloadChat"  ? 2 :
+                    p.Stage == "DownloadingVod"       ? 1 :
+                    /* Pending */                       0)
+                .FirstOrDefaultAsync(ct);
         }
 
         private static async Task SetStageAsync(AppDbContext dbContext, Pipeline job, string stage, CancellationToken ct)
@@ -125,7 +129,8 @@ namespace Vod2Tube.Application
                     {
                         lastUpdate = DateTime.UtcNow;
                         job.Description = status;
-                        await dbContext.SaveChangesAsync(ct);
+                        try { await dbContext.SaveChangesAsync(ct); }
+                        catch (Exception ex) { Console.WriteLine($"Warning: failed to save progress for job {job.VodId}: {ex.Message}"); }
                     }
                 }
                 job.ChatTextFilePath = chatDownloader.GetOutputPath(job.VodId);
@@ -157,7 +162,8 @@ namespace Vod2Tube.Application
                     {
                         lastUpdate = DateTime.UtcNow;
                         job.Description = status;
-                        await dbContext.SaveChangesAsync(ct);
+                        try { await dbContext.SaveChangesAsync(ct); }
+                        catch (Exception ex) { Console.WriteLine($"Warning: failed to save progress for job {job.VodId}: {ex.Message}"); }
                     }
                 }
                 job.ChatVideoFilePath = chatRenderer.GetOutputPath(job.VodId);
@@ -166,6 +172,17 @@ namespace Vod2Tube.Application
 
             if (job.Stage == "PendingCombining" || job.Stage == "Combining")
             {
+                if (string.IsNullOrEmpty(job.VodFilePath))
+                {
+                    await SetStageAsync(dbContext, job, "Pending", ct);
+                    return;
+                }
+                if (string.IsNullOrEmpty(job.ChatVideoFilePath))
+                {
+                    await SetStageAsync(dbContext, job, "PendingRenderingChat", ct);
+                    return;
+                }
+
                 await SetStageAsync(dbContext, job, "Combining", ct);
 
                 if (string.IsNullOrWhiteSpace(job.VodFilePath))
@@ -188,7 +205,8 @@ namespace Vod2Tube.Application
                     {
                         lastUpdate = DateTime.UtcNow;
                         job.Description = status;
-                        await dbContext.SaveChangesAsync(ct);
+                        try { await dbContext.SaveChangesAsync(ct); }
+                        catch (Exception ex) { Console.WriteLine($"Warning: failed to save progress for job {job.VodId}: {ex.Message}"); }
                     }
                 }
                 job.FinalVideoFilePath = finalRenderer.GetOutputPath(job.VodId);
@@ -198,6 +216,12 @@ namespace Vod2Tube.Application
 
             if (job.Stage == "PendingUpload" || job.Stage == "Uploading")
             {
+                if (string.IsNullOrEmpty(job.FinalVideoFilePath))
+                {
+                    await SetStageAsync(dbContext, job, "PendingCombining", ct);
+                    return;
+                }
+
                 await SetStageAsync(dbContext, job, "Uploading", ct);
                 DateTime lastUpdate = DateTime.MinValue;
                 await foreach (var status in videoUploader.RunAsync(job.VodId, job.FinalVideoFilePath, ct))
@@ -206,7 +230,8 @@ namespace Vod2Tube.Application
                     {
                         lastUpdate = DateTime.UtcNow;
                         job.Description = status;
-                        await dbContext.SaveChangesAsync(ct);
+                        try { await dbContext.SaveChangesAsync(ct); }
+                        catch (Exception ex) { Console.WriteLine($"Warning: failed to save progress for job {job.VodId}: {ex.Message}"); }
                     }
                 }
                 await SetStageAsync(dbContext, job, "Uploaded", ct);
