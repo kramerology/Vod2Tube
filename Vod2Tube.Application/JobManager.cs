@@ -129,6 +129,7 @@ namespace Vod2Tube.Application
                     }
                 }
                 job.ChatTextFilePath = chatDownloader.GetOutputPath(job.VodId);
+                await dbContext.SaveChangesAsync(ct);
                 await SetStageAsync(dbContext, job, "PendingRenderingChat", ct);
             }
 
