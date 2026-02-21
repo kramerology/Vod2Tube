@@ -6,6 +6,12 @@ namespace Vod2Tube.Application
         private static readonly DirectoryInfo TempDir = new("VodDownloadsTemp");
         private static readonly DirectoryInfo FinalDir = new("VodDownloads");
 
+        static ChatDownloader()
+        {
+            TempDir.Create();
+            FinalDir.Create();
+        }
+
         public ChatDownloader(TwitchDownloadService downloadService)
         {
             _downloadService = downloadService;

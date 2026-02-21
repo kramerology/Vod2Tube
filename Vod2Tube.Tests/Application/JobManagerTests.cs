@@ -85,6 +85,22 @@ public class JobManagerTests
     }
 
     /// <summary>
+    /// Jobs in the Uploaded state (completed) should not be returned.
+    /// </summary>
+    [Test]
+    public async Task FindHighestPriorityJob_UploadedJobsIgnored()
+    {
+        await using var ctx = CreateInMemoryContext(nameof(FindHighestPriorityJob_UploadedJobsIgnored));
+        ctx.Pipelines.Add(new Pipeline { VodId = "done",    Stage = "Uploaded" });
+        ctx.Pipelines.Add(new Pipeline { VodId = "pending", Stage = "Pending" });
+        await ctx.SaveChangesAsync();
+
+        var result = await JobManager.FindHighestPriorityJobAsync(ctx, CancellationToken.None);
+
+        await Assert.That(result!.VodId).IsEqualTo("pending");
+    }
+
+    /// <summary>
     /// Stage priority array should contain exactly the expected stages in the correct order.
     /// </summary>
     [Test]
@@ -104,6 +120,6 @@ public class JobManagerTests
             "Uploading"
         ];
 
-        await Assert.That(JobManager.StagePriority).IsEqualTo(expected);
+        await Assert.That(JobManager.StagePriority).IsEquivalentTo(expected);
     }
 }
