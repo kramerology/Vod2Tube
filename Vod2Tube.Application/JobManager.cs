@@ -101,7 +101,14 @@ namespace Vod2Tube.Application
                     {
                         lastUpdate = DateTime.UtcNow;
                         job.Description = status;
-                        await dbContext.SaveChangesAsync(ct);
+                        try
+                        {
+                            await dbContext.SaveChangesAsync(ct);
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"Warning: failed to save progress update for job {job.VodId}: {ex.Message}");
+                        }
                     }
                 }
                 job.VodFilePath = vodDownloader.GetOutputPath(job.VodId);
