@@ -13,12 +13,12 @@ namespace Vod2Tube.Application
     /// </summary>
     public class TwitchVod
     {
-        public string Id { get; set; }
-        public string Title { get; set; }
+        public string Id { get; set; } = string.Empty;
+        public string Title { get; set; } = string.Empty;
         public DateTime PublishedAt { get; set; }
         public int LengthSeconds { get; set; }
-        public string Url { get; set; }
-        public Game Game { get; set; }
+        public string Url { get; set; } = string.Empty;
+        public Game? Game { get; set; }
 
         public List<VideoMoment> Moments { get; set; } = new List<VideoMoment>();
 
@@ -37,7 +37,7 @@ namespace Vod2Tube.Application
         private readonly HttpClient _http;
 
         private const string VodsQuery = @"
-query ChannelVideos($login: String!, $first: Int!, $after: String, $types: [BroadcastType!]) {
+query ChannelVideos($login: String!, $first: Int!, $after: Cursor, $types: [BroadcastType!]) {
   user(login: $login) {
     videos(first: $first, after: $after, types: $types, sort: TIME) {
       edges {
@@ -113,7 +113,7 @@ query VideoMoments($videoId: ID!) {
                 throw new ArgumentOutOfRangeException(nameof(pageSize), "Must be between 1 and 100");
 
             var result = new List<TwitchVod>();
-            string cursor = null;
+            string? cursor = null;
             bool hasNext;
 
             do
@@ -145,7 +145,7 @@ query VideoMoments($videoId: ID!) {
             return result;
         }
 
-        private async Task<VideosConnection> QueryPageAsync(string login, int limit, string cursor)
+        private async Task<VideosConnection> QueryPageAsync(string login, int limit, string? cursor)
         {
             var bodyObj = new
             {
@@ -166,11 +166,20 @@ query VideoMoments($videoId: ID!) {
 
             var raw = await resp.Content.ReadAsStringAsync();
             var obj = JObject.Parse(raw);
+
+            // Check for GraphQL errors
+            if (obj["errors"] != null)
+            {
+                var errorMessage = obj["errors"]?[0]?["message"]?.ToString() ?? "Unknown GraphQL error";
+                throw new InvalidOperationException($"GraphQL error: {errorMessage}");
+            }
+
             var userToken = obj["data"]?["user"]
                 ?? throw new InvalidOperationException($"Channel '{login}' not found.");
-            var vidsToken = userToken["videos"];
+            var vidsToken = userToken["videos"]
+                ?? throw new InvalidOperationException($"Unable to retrieve videos for channel '{login}'.");
 
-            return vidsToken.ToObject<VideosConnection>();
+            return vidsToken.ToObject<VideosConnection>()!;
         }
 
         public async Task PopulateVodMomentsAsync(List<TwitchVod> vods)
@@ -219,7 +228,7 @@ query VideoMoments($videoId: ID!) {
                             Type = e.Node.Type,
                             Description = e.Node.Description,
                             ThumbnailUrl = e.Node.ThumbnailURL,
-                            Details = e.Node.Details.Typename == "GameChangeMomentDetails"
+                            Details = e.Node.Details?.Typename == "GameChangeMomentDetails"
                                 ? new GameChangeMomentDetails { Game = e.Node.Details.Game }
                                 : null
                         })
@@ -243,68 +252,68 @@ query VideoMoments($videoId: ID!) {
 
     public class VideoMoment
     {
-        public string Id { get; set; }
+        public string Id { get; set; } = string.Empty;
         public long DurationMilliseconds { get; set; }
         public long PositionMilliseconds { get; set; }
-        public string Type { get; set; }
-        public string Description { get; set; }
-        public string ThumbnailUrl { get; set; }
-        public MomentDetails Details { get; set; }
+        public string Type { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public string ThumbnailUrl { get; set; } = string.Empty;
+        public MomentDetails? Details { get; set; }
     }
 
     public abstract class MomentDetails { }
 
     public class GameChangeMomentDetails : MomentDetails
     {
-        public Game Game { get; set; }
+        public Game? Game { get; set; }
     }
 
     public class Game
     {
-        public string Id { get; set; }
-        public string Slug { get; set; }
-        public string DisplayName { get; set; }
-        public string BoxArtUrl { get; set; }
+        public string Id { get; set; } = string.Empty;
+        public string Slug { get; set; } = string.Empty;
+        public string DisplayName { get; set; } = string.Empty;
+        public string BoxArtUrl { get; set; } = string.Empty;
     }
 
     // Batch response item shape
     internal class BatchResponseItem
     {
         [JsonProperty("data")]
-        public BatchData Data { get; set; }
+        public BatchData? Data { get; set; }
     }
 
     internal class BatchData
     {
         [JsonProperty("video")]
-        public VideoData Video { get; set; }
+        public VideoData? Video { get; set; }
     }
 
     internal class VideoData
     {
         [JsonProperty("id")]
-        public string Id { get; set; }
+        public string Id { get; set; } = string.Empty;
 
         [JsonProperty("moments")]
-        public MomentConnection Moments { get; set; }
+        public MomentConnection Moments { get; set; } = new MomentConnection();
     }
 
     internal class MomentConnection
     {
         [JsonProperty("edges")]
-        public List<MomentEdge> Edges { get; set; }
+        public List<MomentEdge> Edges { get; set; } = new List<MomentEdge>();
     }
 
     internal class MomentEdge
     {
         [JsonProperty("node")]
-        public MomentNode Node { get; set; }
+        public MomentNode Node { get; set; } = new MomentNode();
     }
 
     internal class MomentNode
     {
         [JsonProperty("id")]
-        public string Id { get; set; }
+        public string Id { get; set; } = string.Empty;
 
         [JsonProperty("durationMilliseconds")]
         public long DurationMilliseconds { get; set; }
@@ -313,25 +322,25 @@ query VideoMoments($videoId: ID!) {
         public long PositionMilliseconds { get; set; }
 
         [JsonProperty("type")]
-        public string Type { get; set; }
+        public string Type { get; set; } = string.Empty;
 
         [JsonProperty("description")]
-        public string Description { get; set; }
+        public string Description { get; set; } = string.Empty;
 
         [JsonProperty("thumbnailURL")]
-        public string ThumbnailURL { get; set; }
+        public string ThumbnailURL { get; set; } = string.Empty;
 
         [JsonProperty("details")]
-        public MomentDetailsRaw Details { get; set; }
+        public MomentDetailsRaw? Details { get; set; }
     }
 
     internal class MomentDetailsRaw
     {
         [JsonProperty("__typename")]
-        public string Typename { get; set; }
+        public string? Typename { get; set; }
 
         [JsonProperty("game")]
-        public Game Game { get; set; }
+        public Game? Game { get; set; }
     }
 
 
@@ -339,23 +348,23 @@ query VideoMoments($videoId: ID!) {
 
     internal class VideosConnection
     {
-        [JsonProperty("edges")] public List<VideoEdge> Edges { get; set; }
-        [JsonProperty("pageInfo")] public PageInfo PageInfo { get; set; }
+        [JsonProperty("edges")] public List<VideoEdge> Edges { get; set; } = new List<VideoEdge>();
+        [JsonProperty("pageInfo")] public PageInfo PageInfo { get; set; } = new PageInfo();
     }
 
     internal class VideoEdge
     {
-        [JsonProperty("cursor")] public string Cursor { get; set; }
-        [JsonProperty("node")] public VideoNode Node { get; set; }
+        [JsonProperty("cursor")] public string Cursor { get; set; } = string.Empty;
+        [JsonProperty("node")] public VideoNode Node { get; set; } = new VideoNode();
     }
 
     internal class VideoNode
     {
-        [JsonProperty("id")] public string Id { get; set; }
-        [JsonProperty("title")] public string Title { get; set; }
+        [JsonProperty("id")] public string Id { get; set; } = string.Empty;
+        [JsonProperty("title")] public string Title { get; set; } = string.Empty;
         [JsonProperty("publishedAt")] public DateTime PublishedAt { get; set; }
         [JsonProperty("lengthSeconds")] public int LengthSeconds { get; set; }
-        [JsonProperty("game")] public Game Game { get; set; }
+        [JsonProperty("game")] public Game? Game { get; set; }
     }
 
 
@@ -363,7 +372,7 @@ query VideoMoments($videoId: ID!) {
     internal class PageInfo
     {
         [JsonProperty("hasNextPage")] public bool HasNextPage { get; set; }
-        [JsonProperty("endCursor")] public string EndCursor { get; set; }
+        [JsonProperty("endCursor")] public string? EndCursor { get; set; }
     }
 
     #endregion

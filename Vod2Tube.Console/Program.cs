@@ -35,7 +35,7 @@ var host = Host.CreateDefaultBuilder(args)
         // services.Configure<MyOptions>(context.Configuration.GetSection("MyOptions"));
 
         // Register your workers (BackgroundServices)
-     //   services.AddHostedService<VodPopulator>();
+        services.AddHostedService<VodPopulator>();
         services.AddHostedService<JobManager>();
 
         services.AddScoped<VodDownloader>();
