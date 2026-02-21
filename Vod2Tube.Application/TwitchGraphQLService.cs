@@ -235,7 +235,7 @@ query VideoMoments($videoId: ID!) {
                             Description = e.Node.Description,
                             ThumbnailUrl = e.Node.ThumbnailURL,
                             Details = e.Node.Details?.Typename == "GameChangeMomentDetails"
-                                ? new GameChangeMomentDetails { Game = e.Node.Details.Game }
+                                ? new GameChangeMomentDetails { Game = e.Node.Details?.Game }
                                 : null
                         })
                         .ToList();
