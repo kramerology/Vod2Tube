@@ -135,6 +135,20 @@ namespace Vod2Tube.Application
 
             if (job.Stage == "PendingRenderingChat" || job.Stage == "RenderingChat")
             {
+                // Ensure required paths are available when resuming after a crash.
+                if (string.IsNullOrEmpty(job.VodFilePath))
+                {
+                    // Roll back to an earlier stage to regenerate the VOD file.
+                    await SetStageAsync(dbContext, job, "Pending", ct);
+                    return;
+                }
+
+                if (string.IsNullOrEmpty(job.ChatTextFilePath))
+                {
+                    // Roll back to an earlier stage to regenerate the chat text file.
+                    await SetStageAsync(dbContext, job, "PendingDownloadChat", ct);
+                    return;
+                }
                 await SetStageAsync(dbContext, job, "RenderingChat", ct);
                 DateTime lastUpdate = DateTime.MinValue;
                 await foreach (var status in chatRenderer.RunAsync(job.VodId, job.ChatTextFilePath, job.VodFilePath, ct))
