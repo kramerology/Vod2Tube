@@ -26,7 +26,7 @@
         public string GetOutputPath(string vodId) =>
             Path.Combine(FinalDir.FullName, $"{vodId}.mp4");
 
-        public IAsyncEnumerable<string> RunAsync(string vodId, CancellationToken ct) =>
+        public virtual IAsyncEnumerable<string> RunAsync(string vodId, CancellationToken ct) =>
             _downloadService.DownloadVodNewAsync(vodId, TempDir, new FileInfo(GetOutputPath(vodId)), ct);
     }
 }
