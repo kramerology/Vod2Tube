@@ -164,6 +164,7 @@ namespace Vod2Tube.Application
                     }
                 }
                 job.FinalVideoFilePath = finalRenderer.GetOutputPath(job.VodId);
+                await dbContext.SaveChangesAsync(ct);
                 await SetStageAsync(dbContext, job, "PendingUpload", ct);
             }
 
