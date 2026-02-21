@@ -167,6 +167,20 @@ namespace Vod2Tube.Application
             if (job.Stage == "PendingCombining" || job.Stage == "Combining")
             {
                 await SetStageAsync(dbContext, job, "Combining", ct);
+
+                if (string.IsNullOrWhiteSpace(job.VodFilePath))
+                {
+                    // Roll back to regenerate the VOD (and dependent artifacts) before combining.
+                    await SetStageAsync(dbContext, job, "Pending", ct);
+                    return;
+                }
+
+                if (string.IsNullOrWhiteSpace(job.ChatVideoFilePath))
+                {
+                    // Roll back to regenerate the chat video before combining.
+                    await SetStageAsync(dbContext, job, "PendingRenderingChat", ct);
+                    return;
+                }
                 DateTime lastUpdate = DateTime.MinValue;
                 await foreach (var status in finalRenderer.RunAsync(job.VodId, job.VodFilePath, job.ChatVideoFilePath, ct))
                 {
