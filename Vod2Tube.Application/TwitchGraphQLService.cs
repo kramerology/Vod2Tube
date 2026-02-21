@@ -179,7 +179,13 @@ query VideoMoments($videoId: ID!) {
             var vidsToken = userToken["videos"]
                 ?? throw new InvalidOperationException($"Unable to retrieve videos for channel '{login}'.");
 
-            return vidsToken.ToObject<VideosConnection>()!;
+            var videosConnection = vidsToken.ToObject<VideosConnection>();
+            if (videosConnection == null)
+            {
+                throw new InvalidOperationException($"Failed to deserialize videos for channel '{login}'.");
+            }
+
+            return videosConnection;
         }
 
         public async Task PopulateVodMomentsAsync(List<TwitchVod> vods)
