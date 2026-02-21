@@ -4,6 +4,10 @@ namespace Vod2Tube.Application
     {
         private static readonly DirectoryInfo FinalDir = new("FinalVideos");
 
+        static FinalRenderer()
+        {
+            FinalDir.Create();
+        }
         public string GetOutputPath(string vodId) =>
             Path.Combine(FinalDir.FullName, $"{vodId}_final.mp4");
 
