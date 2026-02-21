@@ -104,6 +104,6 @@ public class JobManagerTests
             "Uploading"
         ];
 
-        await Assert.That(JobManager.StagePriority).IsEquivalentTo(expected);
+        await Assert.That(JobManager.StagePriority).IsEqualTo(expected);
     }
 }
