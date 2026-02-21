@@ -27,7 +27,6 @@ public class PipelineTests
         await Assert.That(pipeline.ChatVideoFilePath).IsEqualTo(string.Empty);
         await Assert.That(pipeline.FinalVideoFilePath).IsEqualTo(string.Empty);
         await Assert.That(pipeline.YoutubeVideoId).IsEqualTo(string.Empty);
-        await Assert.That(pipeline.LeasedBy).IsEqualTo(string.Empty);
     }
 
     /// <summary>
@@ -37,7 +36,6 @@ public class PipelineTests
     [Test]
     public async Task Pipeline_PropertyAssignment_RoundTrips()
     {
-        var now = DateTime.UtcNow;
         var pipeline = new Pipeline
         {
             VodId = "vod123",
@@ -48,8 +46,6 @@ public class PipelineTests
             ChatVideoFilePath = "/data/vod123_chat.mp4",
             FinalVideoFilePath = "/data/vod123_final.mp4",
             YoutubeVideoId = "ytXYZ",
-            LeasedBy = "VodDownloader",
-            LeasedAtUTC = now
         };
 
         await Assert.That(pipeline.VodId).IsEqualTo("vod123");
@@ -60,8 +56,6 @@ public class PipelineTests
         await Assert.That(pipeline.ChatVideoFilePath).IsEqualTo("/data/vod123_chat.mp4");
         await Assert.That(pipeline.FinalVideoFilePath).IsEqualTo("/data/vod123_final.mp4");
         await Assert.That(pipeline.YoutubeVideoId).IsEqualTo("ytXYZ");
-        await Assert.That(pipeline.LeasedBy).IsEqualTo("VodDownloader");
-        await Assert.That(pipeline.LeasedAtUTC).IsEqualTo(now);
     }
 
     /// <summary>
@@ -80,6 +74,7 @@ public class PipelineTests
     [Arguments("PendingUpload")]
     [Arguments("Uploading")]
     [Arguments("Uploaded")]
+    [Arguments("Failed")]
     public async Task Pipeline_Stage_AcceptsKnownStageValue(string stage)
     {
         var pipeline = new Pipeline { Stage = stage };
