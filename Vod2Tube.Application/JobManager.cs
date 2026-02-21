@@ -216,6 +216,12 @@ namespace Vod2Tube.Application
 
             if (job.Stage == "PendingUpload" || job.Stage == "Uploading")
             {
+                if (string.IsNullOrWhiteSpace(job.FinalVideoFilePath))
+                {
+                    job.Description = "Final video file missing, rerunning combining stage.";
+                    await SetStageAsync(dbContext, job, "PendingCombining", ct);
+                    return;
+                }
                 if (string.IsNullOrEmpty(job.FinalVideoFilePath))
                 {
                     await SetStageAsync(dbContext, job, "PendingCombining", ct);
