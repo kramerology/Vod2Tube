@@ -6,6 +6,18 @@
         private static readonly DirectoryInfo TempDir = new("VodDownloadsTemp");
         private static readonly DirectoryInfo FinalDir = new("VodDownloads");
 
+        static VodDownloader()
+        {
+            if (!TempDir.Exists)
+            {
+                TempDir.Create();
+            }
+
+            if (!FinalDir.Exists)
+            {
+                FinalDir.Create();
+            }
+        }
         public VodDownloader(TwitchDownloadService downloadService)
         {
             _downloadService = downloadService;
