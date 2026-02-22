@@ -62,8 +62,8 @@ namespace Vod2Tube.Application
             }
             else
             {
-                options.Title = $"VOD {vodId}";
-                options.Description = $"Twitch VOD {vodId}";
+                options.Title = $"{vodId}";
+                options.Description = $"Twitch VOD {vodId}";               
             }
 
             yield return "Authenticating with YouTube...";
@@ -77,11 +77,14 @@ namespace Vod2Tube.Application
                     Title = options.Title,
                     Description = options.Description,
                     Tags = options.Tags,
-                    CategoryId = options.Category
+                    CategoryId = options.Category,
                 },
                 Status = new VideoStatus
                 {
-                    PrivacyStatus = options.PrivacyStatus
+                   // PrivacyStatus = options.PrivacyStatus,
+                   PrivacyStatus = "private",
+                    MadeForKids = false,
+                    SelfDeclaredMadeForKids = false
                 }
             };
 
