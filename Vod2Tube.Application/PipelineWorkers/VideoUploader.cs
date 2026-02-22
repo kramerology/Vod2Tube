@@ -30,12 +30,8 @@ namespace Vod2Tube.Application
 
         static VideoUploader()
         {
-            if (!CredentialsDir.Exists)
-            {
-                CredentialsDir.Create();
-            }
+            CredentialsDir.Create();
         }
-
         public VideoUploader(AppDbContext dbContext)
         {
             _dbContext = dbContext;
