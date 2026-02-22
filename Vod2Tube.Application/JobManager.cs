@@ -227,7 +227,7 @@ namespace Vod2Tube.Application
             catch (Exception ex)
             {
                 string failedAtStage = job.Stage;
-                job.Stage = "Failed";
+              //  job.Stage = "Failed";
                 job.Description = $"Failed at stage '{failedAtStage}': {ex.Message}";
                 try { await dbContext.SaveChangesAsync(CancellationToken.None); }
                 catch { /* best-effort */ }
