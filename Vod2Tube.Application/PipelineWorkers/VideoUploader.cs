@@ -18,6 +18,7 @@ namespace Vod2Tube.Application
         public string PrivacyStatus { get; set; } = "private"; // private, public, or unlisted
         public List<string> Tags { get; set; } = new();
         public string? PlaylistId { get; set; }
+        public bool MadeForKids { get; set; } = false; 
     }
 
     public class VideoUploader
@@ -62,7 +63,7 @@ namespace Vod2Tube.Application
             }
             else
             {
-                options.Title = $"{vodId}";
+                options.Title = $"VOD {vodId}";
                 options.Description = $"Twitch VOD {vodId}";               
             }
 
@@ -77,14 +78,13 @@ namespace Vod2Tube.Application
                     Title = options.Title,
                     Description = options.Description,
                     Tags = options.Tags,
-                    CategoryId = options.Category,
+                    CategoryId = options.Category
                 },
                 Status = new VideoStatus
                 {
-                   // PrivacyStatus = options.PrivacyStatus,
-                   PrivacyStatus = "private",
-                    MadeForKids = false,
-                    SelfDeclaredMadeForKids = false
+                    PrivacyStatus = options.PrivacyStatus,
+                    MadeForKids = options.MadeForKids,
+                    SelfDeclaredMadeForKids = options.MadeForKids
                 }
             };
 
