@@ -36,10 +36,13 @@ var host = Host.CreateDefaultBuilder(args)
 
         // Register your workers (BackgroundServices)
      //   services.AddHostedService<VodPopulator>();
-     //   services.AddHostedService<VodDownloader>();
-     //  services.AddHostedService<ChatDownloader>();
-        services.AddHostedService<ChatRenderer>();
+        services.AddHostedService<JobManager>();
 
+        services.AddScoped<VodDownloader>();
+        services.AddScoped<ChatDownloader>();
+        services.AddScoped<ChatRenderer>();
+        services.AddScoped<FinalRenderer>();
+        services.AddScoped<VideoUploader>();
         services.AddScoped<TwitchGraphQLService>();
         services.AddScoped<TwitchDownloadService>();
 

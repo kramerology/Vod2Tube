@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 using Google.Apis.Auth.OAuth2;
 using Google.Apis.Services;
 using Google.Apis.Upload;
