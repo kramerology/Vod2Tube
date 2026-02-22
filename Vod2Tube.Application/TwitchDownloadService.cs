@@ -226,7 +226,7 @@ namespace Vod2Tube.Application
                 "h264_amf"   => $"-c:v h264_amf -rc:v vbr_peak -b:v 5M -maxrate 6M -bufsize 10M -usage transcoding -profile:v high -level 4.1 -qmin 18 -qmax 28",
                 "h264_nvenc" => $"-c:v h264_nvenc -b:v 5M -maxrate 6M -bufsize 10M -profile:v high -level 4.1",
                 "h264_qsv"   => $"-c:v h264_qsv -b:v 5M -maxrate 6M -bufsize 10M -profile:v high -level 4.1",
-                _            => $"-c:v libx264 -b:v 5M -maxrate 6M -bufsize 10M -profile:v high -level 4.1 -crf 18",
+                _            => $"-c:v libx264 -b:v 5M -maxrate 6M -bufsize 10M -profile:v high -level 4.1",
             };
 
             string arguments = $"-i \"{vodFile.FullName}\" -i \"{chatVideoFile.FullName}\" -filter_complex \"[0:v][1:v]hstack=inputs=2,format={pixelFormat}\" {encoderArgs} -c:a copy \"{outputFile.FullName}\"";
