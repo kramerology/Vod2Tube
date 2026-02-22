@@ -11,7 +11,7 @@ namespace Vod2Tube.Application
 {
     public class TwitchDownloadService
     {
-        private const string DefaultCliFileName = "E:\\Projects\\Vod2Tube\\Vod2Tube\\Vod2Tube.Console\\bin\\Debug\\net8.0\\TwitchDownloaderCLI.exe";
+        private const string DefaultCliFileName = "E:\\Projects\\Vod2Tube\\Vod2Tube.Console\\bin\\Debug\\net8.0\\TwitchDownloaderCLI.exe";
         private const string _ffmpegPath        = "E:\\Programs\\ffmpeg\\ffmpeg.exe";
         private const string _ffprobePath       = "E:\\Programs\\ffmpeg\\ffprobe.exe";
 
