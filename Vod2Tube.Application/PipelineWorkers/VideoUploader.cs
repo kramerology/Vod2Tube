@@ -128,6 +128,16 @@ namespace Vod2Tube.Application
                 }
             }
 
+            if (totalBytes > 0)
+            {
+                double mbTotal = totalBytes / (1024.0 * 1024.0);
+                yield return $"Uploading video... 100.0% ({mbTotal:F1} MB / {mbTotal:F1} MB)";
+            }
+            else
+            {
+                yield return "Uploading video... 100%";
+            }
+
             var uploadStatus = await uploadTask;
 
             if (uploadStatus.Status == UploadStatus.Failed)
