@@ -136,7 +136,7 @@ namespace Vod2Tube.Application
 
             if (uploadStatus.Status == UploadStatus.Failed)
             {
-                throw new Exception($"Upload failed: {uploadStatus.Exception?.Message}");
+                throw new Exception($"Upload failed: {uploadStatus.Exception?.Message ?? "Unknown error"}");
             }
 
             yield return "Upload completed successfully!";
