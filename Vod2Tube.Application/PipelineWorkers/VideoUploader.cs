@@ -81,8 +81,7 @@ namespace Vod2Tube.Application
                 },
                 Status = new VideoStatus
                 {
-                   // PrivacyStatus = options.PrivacyStatus,
-                   PrivacyStatus = "private",
+                    PrivacyStatus = options.PrivacyStatus,
                     MadeForKids = false,
                     SelfDeclaredMadeForKids = false
                 }
