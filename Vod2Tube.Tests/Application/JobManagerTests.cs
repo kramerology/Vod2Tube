@@ -30,6 +30,7 @@ public class JobManagerTests
     private static IServiceProvider CreateWorkerProvider(VodDownloader? vodDownloader = null)
     {
         var svc = new ServiceCollection();
+        svc.AddDbContext<AppDbContext>(o => o.UseInMemoryDatabase("WorkerProvider"));
         var ds = new TwitchDownloadService();
         svc.AddSingleton(ds);
         if (vodDownloader != null)
