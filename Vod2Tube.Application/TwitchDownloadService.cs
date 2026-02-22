@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
@@ -194,7 +195,7 @@ namespace Vod2Tube.Application
         /// </summary>
         internal static string SelectVideoEncoder(string availableEncoders)
         {
-            var found = new System.Collections.Generic.HashSet<string>(
+            var found = new HashSet<string>(
                 _encoderNameRegex.Matches(availableEncoders).Select(m => m.Value));
             if (found.Contains("h264_amf"))   return "h264_amf";
             if (found.Contains("h264_nvenc")) return "h264_nvenc";
@@ -202,11 +203,37 @@ namespace Vod2Tube.Application
             return "libx264";
         }
 
+        private static readonly Lazy<string> _cachedEncoder = new(DetectVideoEncoder);
+
         private static string DetectVideoEncoder()
         {
             try
             {
-                return SelectVideoEncoder(RunProcessWithOutput(_ffmpegPath, "-hide_banner -encoders"));
+                var psi = new ProcessStartInfo
+                {
+                    FileName = _ffmpegPath,
+                    Arguments = "-hide_banner -encoders",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                };
+
+                using var process = Process.Start(psi)!;
+                // Read both streams before WaitForExit to avoid deadlock if either buffer fills.
+                var stdoutTask = process.StandardOutput.ReadToEndAsync();
+                var stderrTask = process.StandardError.ReadToEndAsync();
+                process.WaitForExit();
+                string output = stdoutTask.GetAwaiter().GetResult();
+                string stderr = stderrTask.GetAwaiter().GetResult();
+
+                if (process.ExitCode != 0)
+                {
+                    Console.Error.WriteLine($"Warning: hardware encoder detection failed (exit code {process.ExitCode}), falling back to libx264. {stderr.Trim()}");
+                    return "libx264";
+                }
+
+                return SelectVideoEncoder(output);
             }
             catch (Exception ex)
             {
@@ -217,7 +244,7 @@ namespace Vod2Tube.Application
 
         public async IAsyncEnumerable<string> CombineVideosAsync(FileInfo vodFile, FileInfo chatVideoFile, FileInfo outputFile, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
-            string encoder = DetectVideoEncoder();
+            string encoder = _cachedEncoder.Value;
 
             string pixelFormat = encoder == "libx264" ? "yuv420p" : "nv12";
 
@@ -282,6 +309,11 @@ namespace Vod2Tube.Application
             }
 
             await waitTask;
+
+            if (process.ExitCode != 0)
+            {
+                throw new InvalidOperationException($"ffmpeg exited with code {process.ExitCode} while combining videos.");
+            }
         }
 
         public async IAsyncEnumerable<string> DownloadChatNewAsync(string vodId, DirectoryInfo tempDir, FileInfo finalFile, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
