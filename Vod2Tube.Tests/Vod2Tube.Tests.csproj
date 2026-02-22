@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <!-- Required by TUnit's source generator -->
+    <IsPackable>false</IsPackable>
+    <!-- Opt in to the new dotnet test experience required by .NET 10 SDK -->
+    <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- TUnit test framework -->
+    <PackageReference Include="TUnit" Version="1.16.4" />
+    <!-- EF Core InMemory for ChannelService tests -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="9.0.9" />
+    <!-- Moq for mocking HttpClient dependencies -->
+    <PackageReference Include="Moq" Version="4.20.72" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Vod2Tube.Application\Vod2Tube.Application.csproj" />
+    <ProjectReference Include="..\Vod2Tube.Domain\Vod2Tube.Domain.csproj" />
+    <ProjectReference Include="..\Vod2Tube.Infrastructure\Vod2Tube.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>

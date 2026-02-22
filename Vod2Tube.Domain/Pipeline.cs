@@ -14,8 +14,5 @@ namespace Vod2Tube.Domain
         public string ChatVideoFilePath { get; set; } = string.Empty;
         public string FinalVideoFilePath { get; set; } = string.Empty;
         public string YoutubeVideoId { get; set; } = string.Empty;
-
-        public string LeasedBy { get; set; } = string.Empty;
-        public DateTime LeasedAtUTC { get; set; }
     }
 }

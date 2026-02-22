@@ -13,6 +13,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+      <_Parameter1>Vod2Tube.Tests</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Vod2Tube.Domain\Vod2Tube.Domain.csproj" />
     <ProjectReference Include="..\Vod2Tube.Infrastructure\Vod2Tube.Infrastructure.csproj" />
   </ItemGroup>
