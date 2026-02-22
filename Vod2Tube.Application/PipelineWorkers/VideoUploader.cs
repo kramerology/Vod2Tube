@@ -106,13 +106,6 @@ namespace Vod2Tube.Application
             videosInsertRequest.ResponseReceived += uploadedVideo =>
             {
                 uploadedVideoId = uploadedVideo.Id;
-                // Store the YouTube video ID in the database
-                var pipeline = _dbContext.Pipelines.FirstOrDefault(p => p.VodId == vodId);
-                if (pipeline != null)
-                {
-                    pipeline.YoutubeVideoId = uploadedVideo.Id;
-                    _dbContext.SaveChanges();
-                }
             };
 
             yield return $"Uploading video... 0%";
@@ -137,6 +130,17 @@ namespace Vod2Tube.Application
             if (uploadStatus.Status == UploadStatus.Failed)
             {
                 throw new Exception($"Upload failed: {uploadStatus.Exception?.Message}");
+            }
+
+            // Store the YouTube video ID in the database after upload completes
+            if (!string.IsNullOrEmpty(uploadedVideoId))
+            {
+                var pipeline = await _dbContext.Pipelines.FirstOrDefaultAsync(p => p.VodId == vodId, ct);
+                if (pipeline != null)
+                {
+                    pipeline.YoutubeVideoId = uploadedVideoId;
+                    await _dbContext.SaveChangesAsync(ct);
+                }
             }
 
             yield return "Upload completed successfully!";
