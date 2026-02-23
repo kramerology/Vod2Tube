@@ -136,4 +136,87 @@ public class TwitchDownloadServiceTests
 
         await Assert.That(double.IsInfinity(fps)).IsTrue();
     }
+
+    // =========================================================================
+    // SelectVideoEncoder – encoder priority tests
+    // =========================================================================
+
+    /// <summary>
+    /// When h264_amf is listed, it should be preferred over all other encoders.
+    /// </summary>
+    [Test]
+    public async Task SelectVideoEncoder_AmfPresent_ReturnsAmf()
+    {
+        string encoder = TwitchDownloadService.SelectVideoEncoder("h264_amf h264_nvenc h264_qsv libx264");
+
+        await Assert.That(encoder).IsEqualTo("h264_amf");
+    }
+
+    /// <summary>
+    /// When h264_amf is absent but h264_nvenc is present, NVENC should be selected.
+    /// </summary>
+    [Test]
+    public async Task SelectVideoEncoder_NvencPresent_NoAmf_ReturnsNvenc()
+    {
+        string encoder = TwitchDownloadService.SelectVideoEncoder("h264_nvenc h264_qsv libx264");
+
+        await Assert.That(encoder).IsEqualTo("h264_nvenc");
+    }
+
+    /// <summary>
+    /// When only h264_qsv is a hardware option, QSV should be selected.
+    /// </summary>
+    [Test]
+    public async Task SelectVideoEncoder_QsvPresent_NoAmfOrNvenc_ReturnsQsv()
+    {
+        string encoder = TwitchDownloadService.SelectVideoEncoder("h264_qsv libx264");
+
+        await Assert.That(encoder).IsEqualTo("h264_qsv");
+    }
+
+    /// <summary>
+    /// When no hardware encoders are present, libx264 should be used as the fallback.
+    /// </summary>
+    [Test]
+    public async Task SelectVideoEncoder_NoHardwareEncoders_ReturnsLibx264()
+    {
+        string encoder = TwitchDownloadService.SelectVideoEncoder("libx264 libx265 aac");
+
+        await Assert.That(encoder).IsEqualTo("libx264");
+    }
+
+    /// <summary>
+    /// An empty encoder list should fall back to libx264.
+    /// </summary>
+    [Test]
+    public async Task SelectVideoEncoder_EmptyString_ReturnsLibx264()
+    {
+        string encoder = TwitchDownloadService.SelectVideoEncoder(string.Empty);
+
+        await Assert.That(encoder).IsEqualTo("libx264");
+    }
+
+    /// <summary>
+    /// Priority is enforced regardless of the order in which encoders appear in the
+    /// ffmpeg output: h264_amf must beat h264_nvenc even when nvenc is listed first.
+    /// </summary>
+    [Test]
+    public async Task SelectVideoEncoder_AmfAfterNvenc_StillReturnsAmf()
+    {
+        string encoder = TwitchDownloadService.SelectVideoEncoder("h264_nvenc h264_amf");
+
+        await Assert.That(encoder).IsEqualTo("h264_amf");
+    }
+
+    /// <summary>
+    /// Partial matches like 'libh264_amf_compat' must not trigger the h264_amf rule.
+    /// </summary>
+    [Test]
+    public async Task SelectVideoEncoder_PartialMatchInLongerName_DoesNotMatch()
+    {
+        // "libh264_amf_compat" contains "h264_amf" as a substring but not as a whole word.
+        string encoder = TwitchDownloadService.SelectVideoEncoder("libh264_amf_compat");
+
+        await Assert.That(encoder).IsEqualTo("libx264");
+    }
 }
