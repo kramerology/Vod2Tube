@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "master" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "master" ]
 
 permissions:
   contents: read
@@ -37,4 +37,4 @@ jobs:
         run: dotnet build Vod2Tube.sln --configuration Release --no-restore
 
       - name: Test
-        run: dotnet test Vod2Tube.sln --configuration Release --no-build --verbosity normal
+        run: dotnet test --solution Vod2Tube.sln --configuration Release --no-build --verbosity normal
