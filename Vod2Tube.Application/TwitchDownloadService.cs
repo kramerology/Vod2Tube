@@ -1,7 +1,9 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -182,6 +184,136 @@ namespace Vod2Tube.Application
             }
 
             await waitTask;
+        }
+
+        private static readonly Regex _encoderNameRegex = new(@"\b(h264_amf|h264_nvenc|h264_qsv)\b", RegexOptions.Compiled);
+        private static readonly Regex _ffmpegProgressRegex = new(@"frame=\s*(\d+).*time=(\S+)", RegexOptions.Compiled);
+
+        /// <summary>
+        /// Selects the best available H.264 encoder from the supplied ffmpeg encoder list output.
+        /// Priority: h264_amf (AMD) → h264_nvenc (NVIDIA) → h264_qsv (Intel) → libx264 (software).
+        /// </summary>
+        internal static string SelectVideoEncoder(string availableEncoders)
+        {
+            var found = new HashSet<string>(
+                _encoderNameRegex.Matches(availableEncoders).Select(m => m.Value));
+            if (found.Contains("h264_amf"))   return "h264_amf";
+            if (found.Contains("h264_nvenc")) return "h264_nvenc";
+            if (found.Contains("h264_qsv"))   return "h264_qsv";
+            return "libx264";
+        }
+
+        private static readonly Lazy<string> _cachedEncoder = new(DetectVideoEncoder);
+
+        private static string DetectVideoEncoder()
+        {
+            try
+            {
+                var psi = new ProcessStartInfo
+                {
+                    FileName = _ffmpegPath,
+                    Arguments = "-hide_banner -encoders",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                };
+
+                using var process = Process.Start(psi)!;
+                // Read both streams before WaitForExit to avoid deadlock if either buffer fills.
+                var stdoutTask = process.StandardOutput.ReadToEndAsync();
+                var stderrTask = process.StandardError.ReadToEndAsync();
+                process.WaitForExit();
+                string output = stdoutTask.GetAwaiter().GetResult();
+                string stderr = stderrTask.GetAwaiter().GetResult();
+
+                if (process.ExitCode != 0)
+                {
+                    Console.Error.WriteLine($"Warning: hardware encoder detection failed (exit code {process.ExitCode}), falling back to libx264. {stderr.Trim()}");
+                    return "libx264";
+                }
+
+                return SelectVideoEncoder(output);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"Warning: hardware encoder detection failed, falling back to libx264. ({ex.Message})");
+                return "libx264";
+            }
+        }
+
+        public async IAsyncEnumerable<string> CombineVideosAsync(FileInfo vodFile, FileInfo chatVideoFile, FileInfo outputFile, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            string encoder = _cachedEncoder.Value;
+
+            string pixelFormat = encoder == "libx264" ? "yuv420p" : "nv12";
+
+            string encoderArgs = encoder switch
+            {
+                "h264_amf"   => $"-c:v h264_amf -rc:v vbr_peak -b:v 5M -maxrate 6M -bufsize 10M -usage transcoding -profile:v high -level 4.1 -qmin 18 -qmax 28",
+                "h264_nvenc" => $"-c:v h264_nvenc -b:v 5M -maxrate 6M -bufsize 10M -profile:v high -level 4.1",
+                "h264_qsv"   => $"-c:v h264_qsv -b:v 5M -maxrate 6M -bufsize 10M -profile:v high -level 4.1",
+                _            => $"-c:v libx264 -b:v 5M -maxrate 6M -bufsize 10M -profile:v high -level 4.1",
+            };
+
+            string arguments = $"-i \"{vodFile.FullName}\" -i \"{chatVideoFile.FullName}\" -filter_complex \"[0:v][1:v]hstack=inputs=2,format={pixelFormat}\" {encoderArgs} -c:a copy \"{outputFile.FullName}\"";
+
+            var psi = new ProcessStartInfo
+            {
+                FileName = _ffmpegPath,
+                Arguments = arguments,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = false,
+                StandardOutputEncoding = Encoding.UTF8,
+                StandardErrorEncoding = Encoding.UTF8
+            };
+
+            using var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
+
+            // ffmpeg writes progress lines to stderr in the form:
+            //   frame=  100 fps= 60 q=28.0 size=  2048kB time=00:00:01.67 ...
+            var statusQueue = new System.Collections.Concurrent.ConcurrentQueue<string>();
+
+            process.ErrorDataReceived += (sender, e) =>
+            {
+                if (string.IsNullOrEmpty(e.Data)) return;
+                var match = _ffmpegProgressRegex.Match(e.Data);
+                if (match.Success)
+                {
+                    statusQueue.Enqueue($"Encoding frame {match.Groups[1].Value}, time {match.Groups[2].Value}");
+                }
+            };
+
+            process.Start();
+            process.BeginErrorReadLine();
+
+            yield return $"Combining videos using {encoder}";
+
+            var waitTask = process.WaitForExitAsync(cancellationToken);
+
+            while (!waitTask.IsCompleted)
+            {
+                while (statusQueue.TryDequeue(out var status))
+                {
+                    yield return status;
+                }
+                await Task.Delay(100, cancellationToken);
+            }
+
+            // Drain any remaining statuses after process exit
+            while (statusQueue.TryDequeue(out var status))
+            {
+                yield return status;
+            }
+
+            await waitTask;
+
+            if (process.ExitCode != 0)
+            {
+                throw new InvalidOperationException($"ffmpeg exited with code {process.ExitCode} while combining videos.");
+            }
         }
 
         public async IAsyncEnumerable<string> DownloadChatNewAsync(string vodId, DirectoryInfo tempDir, FileInfo finalFile, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)

@@ -1,4 +1,6 @@
 using System.Reflection;
+using System.Text;
+using System.Text.RegularExpressions;
 using Google.Apis.Auth.OAuth2;
 using Google.Apis.Services;
 using Google.Apis.Upload;
@@ -71,8 +73,8 @@ namespace Vod2Tube.Application
             {
                 Snippet = new VideoSnippet
                 {
-                    Title = options.Title,
-                    Description = options.Description,
+                    Title = SanitizeString(options.Title),
+                    Description = SanitizeString(options.Description),
                     Tags = options.Tags,
                     CategoryId = options.Category
                 },
@@ -207,6 +209,47 @@ namespace Vod2Tube.Application
             };
 
             await service.PlaylistItems.Insert(playlistItem, "snippet").ExecuteAsync(ct);
+        }
+
+        private static string SanitizeString(string title)
+        {
+            if (string.IsNullOrWhiteSpace(title))
+            {
+                return "Untitled Video";
+            }
+
+            // Remove emojis and other Unicode symbols (keep basic Latin, Latin-1 Supplement, and common punctuation)
+            var sanitized = new StringBuilder();
+            foreach (var c in title)
+            {
+                // Keep alphanumeric, basic punctuation, and extended Latin characters
+                if ((c >= 0x20 && c <= 0x7E) ||        // Basic Latin (printable ASCII)
+                    (c >= 0xA0 && c <= 0xFF) ||        // Latin-1 Supplement
+                    char.IsWhiteSpace(c))
+                {
+                    sanitized.Append(c);
+                }
+            }
+
+            // Replace multiple spaces with single space and trim
+            var result = Regex.Replace(sanitized.ToString(), @"\s+", " ").Trim();
+
+            // Remove characters that YouTube doesn't allow: < > 
+            result = Regex.Replace(result, @"[<>]", "");
+
+            // Ensure the title isn't empty after sanitization
+            if (string.IsNullOrWhiteSpace(result))
+            {
+                return "Untitled Video";
+            }
+
+            // YouTube title max length is 100 characters
+            if (result.Length > 100)
+            {
+                result = result.Substring(0, 100).TrimEnd();
+            }
+
+            return result;
         }
     }
 }
