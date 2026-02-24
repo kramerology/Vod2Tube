@@ -117,6 +117,15 @@ public class VideoUploaderTests
         await Assert.That(result).IsEqualTo("Best Stream Ever");
     }
 
+    /// <summary>
+    /// A title that becomes empty after angle bracket removal should fall back to "Untitled Video".
+    /// </summary>
+    [Test]
+    public async Task SanitizeString_OnlyAngleBrackets_ReturnsUntitledVideo()
+    {
+        var result = VideoUploader.SanitizeString("<>");
+        await Assert.That(result).IsEqualTo("Untitled Video");
+    }
     // =========================================================================
     // SanitizeString — whitespace normalisation
     // =========================================================================
