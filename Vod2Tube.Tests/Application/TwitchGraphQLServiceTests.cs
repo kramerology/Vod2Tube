@@ -1,6 +1,7 @@
 using TUnit.Core;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
+using Microsoft.Extensions.Logging.Abstractions;
 using Vod2Tube.Application;
 
 namespace Vod2Tube.Tests.Application;
@@ -23,7 +24,7 @@ public class TwitchGraphQLServiceTests
     [Test]
     public async Task GetAllVodsAsync_NullChannelLogin_ThrowsArgumentException()
     {
-        var service = new TwitchGraphQLService();
+        var service = new TwitchGraphQLService(NullLogger<TwitchGraphQLService>.Instance);
 
         await Assert.That(async () =>
             await service.GetAllVodsAsync(null!))
@@ -37,7 +38,7 @@ public class TwitchGraphQLServiceTests
     [Test]
     public async Task GetAllVodsAsync_EmptyChannelLogin_ThrowsArgumentException()
     {
-        var service = new TwitchGraphQLService();
+        var service = new TwitchGraphQLService(NullLogger<TwitchGraphQLService>.Instance);
 
         await Assert.That(async () =>
             await service.GetAllVodsAsync(string.Empty))
@@ -52,7 +53,7 @@ public class TwitchGraphQLServiceTests
     [Test]
     public async Task GetAllVodsAsync_WhitespaceChannelLogin_ThrowsArgumentException()
     {
-        var service = new TwitchGraphQLService();
+        var service = new TwitchGraphQLService(NullLogger<TwitchGraphQLService>.Instance);
 
         await Assert.That(async () =>
             await service.GetAllVodsAsync("   "))
@@ -66,7 +67,7 @@ public class TwitchGraphQLServiceTests
     [Test]
     public async Task GetAllVodsAsync_PageSizeZero_ThrowsArgumentOutOfRangeException()
     {
-        var service = new TwitchGraphQLService();
+        var service = new TwitchGraphQLService(NullLogger<TwitchGraphQLService>.Instance);
 
         await Assert.That(async () =>
             await service.GetAllVodsAsync("ninja", pageSize: 0))
@@ -81,7 +82,7 @@ public class TwitchGraphQLServiceTests
     [Test]
     public async Task GetAllVodsAsync_NegativePageSize_ThrowsArgumentOutOfRangeException()
     {
-        var service = new TwitchGraphQLService();
+        var service = new TwitchGraphQLService(NullLogger<TwitchGraphQLService>.Instance);
 
         await Assert.That(async () =>
             await service.GetAllVodsAsync("ninja", pageSize: -1))
@@ -96,7 +97,7 @@ public class TwitchGraphQLServiceTests
     [Test]
     public async Task GetAllVodsAsync_PageSizeOver100_ThrowsArgumentOutOfRangeException()
     {
-        var service = new TwitchGraphQLService();
+        var service = new TwitchGraphQLService(NullLogger<TwitchGraphQLService>.Instance);
 
         await Assert.That(async () =>
             await service.GetAllVodsAsync("ninja", pageSize: 101))
@@ -114,7 +115,7 @@ public class TwitchGraphQLServiceTests
     [Test]
     public async Task PopulateVodMomentsAsync_NullList_ReturnsWithoutThrowing()
     {
-        var service = new TwitchGraphQLService();
+        var service = new TwitchGraphQLService(NullLogger<TwitchGraphQLService>.Instance);
 
         await Assert.That(async () =>
             await service.PopulateVodMomentsAsync(null!))
@@ -128,7 +129,7 @@ public class TwitchGraphQLServiceTests
     [Test]
     public async Task PopulateVodMomentsAsync_EmptyList_ReturnsWithoutThrowing()
     {
-        var service = new TwitchGraphQLService();
+        var service = new TwitchGraphQLService(NullLogger<TwitchGraphQLService>.Instance);
 
         await Assert.That(async () =>
             await service.PopulateVodMomentsAsync(new List<TwitchVod>()))
