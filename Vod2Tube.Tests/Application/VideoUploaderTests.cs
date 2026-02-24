@@ -155,7 +155,9 @@ public class VideoUploaderTests
     // =========================================================================
 
     /// <summary>
-    /// A title longer than 100 characters should be truncated to exactly 100.
+    /// A title longer than 100 characters should be truncated to at most 100
+    /// characters (TrimEnd may produce a shorter string if the 100th character
+    /// is a trailing space).
     /// </summary>
     [Test]
     public async Task SanitizeString_TitleOver100Chars_TruncatedTo100()
