@@ -211,7 +211,7 @@ namespace Vod2Tube.Application
             await service.PlaylistItems.Insert(playlistItem, "snippet").ExecuteAsync(ct);
         }
 
-        private static string SanitizeString(string title)
+        internal static string SanitizeString(string title)
         {
             if (string.IsNullOrWhiteSpace(title))
             {
