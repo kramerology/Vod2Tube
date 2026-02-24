@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Core;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
@@ -31,7 +32,7 @@ public class JobManagerTests
     {
         var svc = new ServiceCollection();
         svc.AddDbContext<AppDbContext>(o => o.UseInMemoryDatabase("WorkerProvider"));
-        var ds = new TwitchDownloadService();
+        var ds = new TwitchDownloadService(NullLogger<TwitchDownloadService>.Instance);
         svc.AddSingleton(ds);
         if (vodDownloader != null)
             svc.AddSingleton(vodDownloader);
@@ -156,7 +157,7 @@ public class JobManagerTests
         ctx.Pipelines.Add(job);
         await ctx.SaveChangesAsync();
 
-        await JobManager.ProcessJobToCompletionAsync(job, ctx, CreateWorkerProvider(), CancellationToken.None);
+        await JobManager.ProcessJobToCompletionAsync(job, ctx, CreateWorkerProvider(), NullLogger.Instance, CancellationToken.None);
 
         await Assert.That(job.Stage).IsEqualTo("Pending");
     }
@@ -169,7 +170,7 @@ public class JobManagerTests
         ctx.Pipelines.Add(job);
         await ctx.SaveChangesAsync();
 
-        await JobManager.ProcessJobToCompletionAsync(job, ctx, CreateWorkerProvider(), CancellationToken.None);
+        await JobManager.ProcessJobToCompletionAsync(job, ctx, CreateWorkerProvider(), NullLogger.Instance, CancellationToken.None);
 
         await Assert.That(job.Stage).IsEqualTo("PendingDownloadChat");
     }
@@ -182,7 +183,7 @@ public class JobManagerTests
         ctx.Pipelines.Add(job);
         await ctx.SaveChangesAsync();
 
-        await JobManager.ProcessJobToCompletionAsync(job, ctx, CreateWorkerProvider(), CancellationToken.None);
+        await JobManager.ProcessJobToCompletionAsync(job, ctx, CreateWorkerProvider(), NullLogger.Instance, CancellationToken.None);
 
         await Assert.That(job.Stage).IsEqualTo("Pending");
     }
@@ -195,7 +196,7 @@ public class JobManagerTests
         ctx.Pipelines.Add(job);
         await ctx.SaveChangesAsync();
 
-        await JobManager.ProcessJobToCompletionAsync(job, ctx, CreateWorkerProvider(), CancellationToken.None);
+        await JobManager.ProcessJobToCompletionAsync(job, ctx, CreateWorkerProvider(), NullLogger.Instance, CancellationToken.None);
 
         await Assert.That(job.Stage).IsEqualTo("PendingRenderingChat");
     }
@@ -208,7 +209,7 @@ public class JobManagerTests
         ctx.Pipelines.Add(job);
         await ctx.SaveChangesAsync();
 
-        await JobManager.ProcessJobToCompletionAsync(job, ctx, CreateWorkerProvider(), CancellationToken.None);
+        await JobManager.ProcessJobToCompletionAsync(job, ctx, CreateWorkerProvider(), NullLogger.Instance, CancellationToken.None);
 
         await Assert.That(job.Stage).IsEqualTo("PendingCombining");
     }
