@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Vod2Tube.Domain;
 using Vod2Tube.Infrastructure;
 
@@ -9,6 +10,7 @@ namespace Vod2Tube.Application
     public class JobManager : BackgroundService
     {
         private readonly IServiceScopeFactory _scopeFactory;
+        private readonly ILogger<JobManager> _logger;
 
         // Stages ordered from lowest to highest priority (furthest along = highest priority)
         internal static readonly string[] StagePriority =
@@ -25,13 +27,15 @@ namespace Vod2Tube.Application
             "Uploading"
         ];
 
-        public JobManager(IServiceScopeFactory scopeFactory)
+        public JobManager(IServiceScopeFactory scopeFactory, ILogger<JobManager> logger)
         {
             _scopeFactory = scopeFactory;
+            _logger = logger;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
+            _logger.LogInformation("JobManager started");
             while (!stoppingToken.IsCancellationRequested)
             {
                 try
@@ -47,7 +51,7 @@ namespace Vod2Tube.Application
                         continue;
                     }
 
-                    await ProcessJobToCompletionAsync(job, dbContext, scope.ServiceProvider, stoppingToken);
+                    await ProcessJobToCompletionAsync(job, dbContext, scope.ServiceProvider, _logger, stoppingToken);
                 }
                 catch (OperationCanceledException)
                 {
@@ -55,10 +59,11 @@ namespace Vod2Tube.Application
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"Error in JobManager: {ex}");
+                    _logger.LogError(ex, "Unhandled error in JobManager");
                     await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
                 }
             }
+            _logger.LogInformation("JobManager stopped");
         }
 
         internal static async Task<Pipeline?> FindHighestPriorityJobAsync(AppDbContext dbContext, CancellationToken ct)
@@ -85,7 +90,7 @@ namespace Vod2Tube.Application
             await dbContext.SaveChangesAsync(ct);
         }
 
-        internal static async Task ProcessJobToCompletionAsync(Pipeline job, AppDbContext dbContext, IServiceProvider services, CancellationToken ct)
+        internal static async Task ProcessJobToCompletionAsync(Pipeline job, AppDbContext dbContext, IServiceProvider services, ILogger logger, CancellationToken ct)
         {
             var vodDownloader  = services.GetRequiredService<VodDownloader>();
             var chatDownloader = services.GetRequiredService<ChatDownloader>();
@@ -93,7 +98,7 @@ namespace Vod2Tube.Application
             var finalRenderer  = services.GetRequiredService<FinalRenderer>();
             var videoUploader  = services.GetRequiredService<VideoUploader>();
 
-            Console.WriteLine($"Processing job {job.VodId} from stage: {job.Stage}");
+            logger.LogInformation("Processing job {VodId} from stage: {Stage}", job.VodId, job.Stage);
 
             try
             {
@@ -108,7 +113,7 @@ namespace Vod2Tube.Application
                             lastUpdate = DateTime.UtcNow;
                             job.Description = status;
                             try { await dbContext.SaveChangesAsync(ct); }
-                            catch (Exception ex) { Console.WriteLine($"Warning: failed to save progress for job {job.VodId}: {ex.Message}"); }
+                            catch (Exception ex) { logger.LogWarning(ex, "Failed to save progress for job {VodId}", job.VodId); }
                         }
                     }
                     job.VodFilePath = vodDownloader.GetOutputPath(job.VodId);
@@ -126,7 +131,7 @@ namespace Vod2Tube.Application
                             lastUpdate = DateTime.UtcNow;
                             job.Description = status;
                             try { await dbContext.SaveChangesAsync(ct); }
-                            catch (Exception ex) { Console.WriteLine($"Warning: failed to save progress for job {job.VodId}: {ex.Message}"); }
+                            catch (Exception ex) { logger.LogWarning(ex, "Failed to save progress for job {VodId}", job.VodId); }
                         }
                     }
                     job.ChatTextFilePath = chatDownloader.GetOutputPath(job.VodId);
@@ -156,7 +161,7 @@ namespace Vod2Tube.Application
                             lastUpdate = DateTime.UtcNow;
                             job.Description = status;
                             try { await dbContext.SaveChangesAsync(ct); }
-                            catch (Exception ex) { Console.WriteLine($"Warning: failed to save progress for job {job.VodId}: {ex.Message}"); }
+                            catch (Exception ex) { logger.LogWarning(ex, "Failed to save progress for job {VodId}", job.VodId); }
                         }
                     }
                     job.ChatVideoFilePath = chatRenderer.GetOutputPath(job.VodId);
@@ -186,7 +191,7 @@ namespace Vod2Tube.Application
                             lastUpdate = DateTime.UtcNow;
                             job.Description = status;
                             try { await dbContext.SaveChangesAsync(ct); }
-                            catch (Exception ex) { Console.WriteLine($"Warning: failed to save progress for job {job.VodId}: {ex.Message}"); }
+                            catch (Exception ex) { logger.LogWarning(ex, "Failed to save progress for job {VodId}", job.VodId); }
                         }
                     }
                     job.FinalVideoFilePath = finalRenderer.GetOutputPath(job.VodId);
@@ -212,13 +217,13 @@ namespace Vod2Tube.Application
                             lastUpdate = DateTime.UtcNow;
                             job.Description = status;
                             try { await dbContext.SaveChangesAsync(ct); }
-                            catch (Exception ex) { Console.WriteLine($"Warning: failed to save progress for job {job.VodId}: {ex.Message}"); }
+                            catch (Exception ex) { logger.LogWarning(ex, "Failed to save progress for job {VodId}", job.VodId); }
                         }
                     }
                     await SetStageAsync(dbContext, job, "Uploaded", ct);
                 }
 
-                Console.WriteLine($"Job {job.VodId} completed.");
+                logger.LogInformation("Job {VodId} completed", job.VodId);
             }
             catch (OperationCanceledException)
             {
@@ -231,7 +236,7 @@ namespace Vod2Tube.Application
                 job.Description = $"Failed at stage '{failedAtStage}': {ex.Message}";
                 try { await dbContext.SaveChangesAsync(CancellationToken.None); }
                 catch { /* best-effort */ }
-                Console.WriteLine($"Job {job.VodId} failed at stage '{failedAtStage}': {ex}");
+                logger.LogError(ex, "Job {VodId} failed at stage '{Stage}'", job.VodId, failedAtStage);
             }
         }
     }
