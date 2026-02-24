@@ -8,6 +8,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 
 namespace Vod2Tube.Application
 {
@@ -17,8 +18,16 @@ namespace Vod2Tube.Application
         private const string _ffmpegPath        = "E:\\Programs\\ffmpeg\\ffmpeg.exe";
         private const string _ffprobePath       = "E:\\Programs\\ffmpeg\\ffprobe.exe";
 
+        private readonly ILogger<TwitchDownloadService> _logger;
+        private readonly Lazy<string> _cachedEncoder;
 
-        static string RunProcessWithOutput(string fileName, string arguments)
+        public TwitchDownloadService(ILogger<TwitchDownloadService> logger)
+        {
+            _logger = logger;
+            _cachedEncoder = new Lazy<string>(DetectVideoEncoder);
+        }
+
+        private string RunProcessWithOutput(string fileName, string arguments)
         {
             var psi = new ProcessStartInfo
             {
@@ -37,8 +46,8 @@ namespace Vod2Tube.Application
             if (process.ExitCode != 0)
             {
                 string error = process.StandardError.ReadToEnd();
-                Console.Error.WriteLine($"Error: '{fileName} {arguments}' failed with exit code {process.ExitCode}.");
-                Console.Error.WriteLine(error);
+                _logger.LogError("Process '{FileName} {Arguments}' failed with exit code {ExitCode}. {Error}",
+                    fileName, arguments, process.ExitCode, error);
                 Environment.Exit(process.ExitCode);
             }
 
@@ -203,9 +212,7 @@ namespace Vod2Tube.Application
             return "libx264";
         }
 
-        private static readonly Lazy<string> _cachedEncoder = new(DetectVideoEncoder);
-
-        private static string DetectVideoEncoder()
+        private string DetectVideoEncoder()
         {
             try
             {
@@ -229,7 +236,8 @@ namespace Vod2Tube.Application
 
                 if (process.ExitCode != 0)
                 {
-                    Console.Error.WriteLine($"Warning: hardware encoder detection failed (exit code {process.ExitCode}), falling back to libx264. {stderr.Trim()}");
+                    _logger.LogWarning("Hardware encoder detection failed (exit code {ExitCode}), falling back to libx264. {Stderr}",
+                        process.ExitCode, stderr.Trim());
                     return "libx264";
                 }
 
@@ -237,7 +245,7 @@ namespace Vod2Tube.Application
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"Warning: hardware encoder detection failed, falling back to libx264. ({ex.Message})");
+                _logger.LogWarning(ex, "Hardware encoder detection failed, falling back to libx264");
                 return "libx264";
             }
         }
