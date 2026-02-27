@@ -38,13 +38,14 @@ var host = Host.CreateDefaultBuilder(args)
      //   services.AddHostedService<VodPopulator>();
         services.AddHostedService<JobManager>();
 
-        services.AddScoped<VodDownloader>();
-        services.AddScoped<ChatDownloader>();
-        services.AddScoped<ChatRenderer>();
-        services.AddScoped<FinalRenderer>();
-        services.AddScoped<VideoUploader>();
-        services.AddScoped<TwitchGraphQLService>();
-        services.AddScoped<TwitchDownloadService>();
+            services.AddHostedService<VodPopulator>();
+            services.AddScoped<VodDownloader>();
+            services.AddScoped<ChatDownloader>();
+            services.AddScoped<ChatRenderer>();
+            services.AddScoped<FinalRenderer>();
+            services.AddScoped<VideoUploader>();
+            services.AddScoped<TwitchGraphQLService>();
+            services.AddScoped<TwitchDownloadService>();
 
         services.AddDbContext<AppDbContext>(options =>
         {
@@ -61,31 +62,13 @@ var host = Host.CreateDefaultBuilder(args)
 
 await host.RunAsync();
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-TwitchGraphQLService twitchVodService = new TwitchGraphQLService();
-
-
-
-var vods = await twitchVodService.GetAllVodsAsync("itswill");
-
-
-;
-
+    Log.Information("Vod2Tube shut down cleanly");
+}
+catch (Exception ex)
+{
+    Log.Fatal(ex, "Vod2Tube terminated unexpectedly");
+}
+finally
+{
+    await Log.CloseAndFlushAsync();
+}
