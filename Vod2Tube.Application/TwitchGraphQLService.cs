@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -35,6 +36,7 @@ namespace Vod2Tube.Application
     {
         private const string GqlEndpoint = "https://gql.twitch.tv/gql";
         private readonly HttpClient _http;
+        private readonly ILogger<TwitchGraphQLService> _logger;
 
         private const string VodsQuery = @"
 query ChannelVideos($login: String!, $first: Int!, $after: Cursor, $types: [BroadcastType!]) {
@@ -93,8 +95,9 @@ query VideoMoments($videoId: ID!) {
   }
 }";
 
-        public TwitchGraphQLService()
+        public TwitchGraphQLService(ILogger<TwitchGraphQLService> logger)
         {
+            _logger = logger;
             _http = new HttpClient();
             _http.DefaultRequestHeaders.Add("Client-ID", "kimne78kx3ncx6brgo4mv6wki5h1ko");
             _http.DefaultRequestHeaders.Add("Accept", "application/json");
@@ -222,7 +225,7 @@ query VideoMoments($videoId: ID!) {
                     {
                         foreach (var error in item.Errors)
                         {
-                            Console.Error.WriteLine($"GraphQL error fetching moments: {error.Message ?? "Unknown GraphQL error"}");
+                            _logger.LogWarning("GraphQL error fetching VOD moments: {Message}", error.Message ?? "Unknown GraphQL error");
                         }
                         continue;
                     }
