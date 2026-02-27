@@ -5,8 +5,8 @@ namespace Vod2Tube.Application
     /// Set <see cref="IsPermanent"/> to <see langword="true"/> when the failure
     /// should not be retried (the job will be marked <c>Failed</c> immediately).
     /// Leave it <see langword="false"/> for transient failures that may succeed on
-    /// a subsequent attempt (the job will be retried up to 3 times before being
-    /// marked <c>Failed</c>).
+    /// a subsequent attempt (the job will be attempted up to 3 times in total
+    /// before being marked <c>Failed</c>).
     /// </summary>
     public class PipelineJobException : Exception
     {
