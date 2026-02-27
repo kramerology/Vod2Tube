@@ -76,6 +76,7 @@ namespace Vod2Tube.Application
                     p.Stage == "PendingDownloadChat"  ? 2 :
                     p.Stage == "DownloadingVod"       ? 1 :
                     /* Pending */                       0)
+                .ThenBy(p => p.VodId)
                 .FirstOrDefaultAsync(ct);
         }
 
