@@ -1,6 +1,7 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -14,9 +15,12 @@ namespace Vod2Tube.Application
     public class VodPopulator : BackgroundService
     {
         private readonly IServiceScopeFactory _scopeFactory;
-        public VodPopulator(IServiceScopeFactory scopeFactory)
+        private readonly ILogger<VodPopulator> _logger;
+
+        public VodPopulator(IServiceScopeFactory scopeFactory, ILogger<VodPopulator> logger)
         {
             _scopeFactory = scopeFactory;
+            _logger = logger;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -76,8 +80,7 @@ namespace Vod2Tube.Application
                 }
                 catch (Exception ex)
                 {
-                    // Log the exception (consider using a logging framework)
-                    Console.WriteLine($"Error in VodDownloader: {ex.Message}");
+                    _logger.LogError(ex, "Error in VodPopulator");
                 }
                 finally
                 {
