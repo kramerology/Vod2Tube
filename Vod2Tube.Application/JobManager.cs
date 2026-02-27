@@ -12,6 +12,9 @@ namespace Vod2Tube.Application
         private readonly IServiceScopeFactory _scopeFactory;
         private readonly ILogger<JobManager> _logger;
 
+        // Maximum number of total attempts before a transient failure is treated as permanent.
+        internal const int MaxRetryAttempts = 3;
+
         // Stages ordered from lowest to highest priority (furthest along = highest priority)
         internal static readonly string[] StagePriority =
         [
@@ -239,7 +242,7 @@ namespace Vod2Tube.Application
                 job.FailCount++;
                 job.Description = failMessage;
 
-                if (isPermanent || job.FailCount >= 3)
+                if (isPermanent || job.FailCount >= MaxRetryAttempts)
                 {
                     job.Failed = true;
                     job.FailReason = failMessage;
