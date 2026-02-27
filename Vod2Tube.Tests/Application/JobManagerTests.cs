@@ -219,6 +219,23 @@ public class JobManagerTests
     // =========================================================================
 
     [Test]
+    public async Task ProcessJob_StageTransition_ResetsFailCount()
+    {
+        await using var ctx = CreateInMemoryContext(nameof(ProcessJob_StageTransition_ResetsFailCount));
+        // Simulate a job that already has 2 failures recorded at a prior stage.
+        var job = new Pipeline { VodId = "v1", Stage = "Pending", FailCount = 2 };
+        ctx.Pipelines.Add(job);
+        await ctx.SaveChangesAsync();
+
+        // One failure at DownloadingVod — but the stage change from Pending → DownloadingVod
+        // should reset FailCount to 0 first, so only 1 failure is counted here.
+        await JobManager.ProcessJobToCompletionAsync(job, ctx, CreateWorkerProvider(new ThrowingVodDownloader()), NullLogger.Instance, CancellationToken.None);
+
+        await Assert.That(job.Failed).IsEqualTo(false);
+        await Assert.That(job.FailCount).IsEqualTo(1);
+    }
+
+    [Test]
     public async Task ProcessJob_WorkerThrows_MarksJobAsFailed_PreservingFailedStage()
     {
         await using var ctx = CreateInMemoryContext(nameof(ProcessJob_WorkerThrows_MarksJobAsFailed_PreservingFailedStage));

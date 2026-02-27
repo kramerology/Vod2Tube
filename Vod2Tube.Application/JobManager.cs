@@ -90,6 +90,8 @@ namespace Vod2Tube.Application
 
         private static async Task SetStageAsync(AppDbContext dbContext, Pipeline job, string stage, CancellationToken ct)
         {
+            if (job.Stage != stage)
+                job.FailCount = 0;
             job.Stage = stage;
             await dbContext.SaveChangesAsync(ct);
         }
