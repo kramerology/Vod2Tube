@@ -13,7 +13,7 @@ namespace Vod2Tube.Application
 {
     public class TwitchDownloadService
     {
-        private const string DefaultCliFileName = "E:\\Projects\\Vod2Tube\\Vod2Tube.Console\\bin\\Debug\\net8.0\\TwitchDownloaderCLI.exe";
+        private const string DefaultCliFileName = "E:\\Projects\\Vod2Tube\\Vod2Tube.Console\\bin\\Debug\\net10.0\\TwitchDownloaderCLI.exe";
         private const string _ffmpegPath        = "E:\\Programs\\ffmpeg\\ffmpeg.exe";
         private const string _ffprobePath       = "E:\\Programs\\ffmpeg\\ffprobe.exe";
 
@@ -96,6 +96,7 @@ namespace Vod2Tube.Application
 
             var regex = new Regex(@"^\[STATUS\] - (.*?)$");
             var statusQueue = new System.Collections.Concurrent.ConcurrentQueue<string>();
+            var errorOutput = new StringBuilder();
             var outputReceived = new TaskCompletionSource<bool>();
 
             process.OutputDataReceived += (sender, e) =>
@@ -108,8 +109,17 @@ namespace Vod2Tube.Application
                 }
             };
 
+            process.ErrorDataReceived += (sender, e) =>
+            {
+                if (!string.IsNullOrEmpty(e.Data))
+                {
+                    errorOutput.AppendLine(e.Data);
+                }
+            };
+
             process.Start();
             process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
 
             var waitTask = process.WaitForExitAsync(cancellationToken);
 
@@ -129,6 +139,14 @@ namespace Vod2Tube.Application
             }
 
             await waitTask;
+
+            if (process.ExitCode != 0)
+            {
+                string errorText = errorOutput.ToString();
+                _logger.LogError("TwitchDownloaderCLI chatrender exited with code {ExitCode} for chat file {ChatFile}. Arguments: {Arguments}. Stderr: {Stderr}",
+                    process.ExitCode, chatFile.FullName, arguments, errorText);
+                throw new InvalidOperationException($"TwitchDownloaderCLI chatrender exited with code {process.ExitCode} for chat file {chatFile.FullName}.");
+            }
         }
 
         public async IAsyncEnumerable<string> DownloadVodNewAsync(string vodId, DirectoryInfo tempDir, FileInfo finalFile, CancellationToken cancellationToken = default)
@@ -151,6 +169,7 @@ namespace Vod2Tube.Application
 
             var regex = new Regex(@"^\[STATUS\] - (.*?) \[\d+/\d+\]$");
             var statusQueue = new System.Collections.Concurrent.ConcurrentQueue<string>();
+            var errorOutput = new StringBuilder();
             var outputReceived = new TaskCompletionSource<bool>();
 
             process.OutputDataReceived += (sender, e) =>
@@ -163,8 +182,17 @@ namespace Vod2Tube.Application
                 }
             };
 
+            process.ErrorDataReceived += (sender, e) =>
+            {
+                if (!string.IsNullOrEmpty(e.Data))
+                {
+                    errorOutput.AppendLine(e.Data);
+                }
+            };
+
             process.Start();
             process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
 
             var waitTask = process.WaitForExitAsync(cancellationToken);
 
@@ -184,6 +212,22 @@ namespace Vod2Tube.Application
             }
 
             await waitTask;
+
+            if (process.ExitCode != 0)
+            {
+                string errorText = errorOutput.ToString();
+
+                // Check for specific known errors
+                if (errorText.Contains("Invalid VOD, deleted/expired VOD possibly?", StringComparison.OrdinalIgnoreCase))
+                {
+                    _logger.LogWarning("VOD {VodId} is invalid, deleted, or expired. This will be counted as a failure.", vodId);
+                    throw new InvalidOperationException($"VOD {vodId} is invalid, deleted, or expired.");
+                }
+
+                _logger.LogError("TwitchDownloaderCLI videodownload exited with code {ExitCode} for VOD {VodId}. Arguments: {Arguments}. Stderr: {Stderr}",
+                    process.ExitCode, vodId, arguments, errorText);
+                throw new InvalidOperationException($"TwitchDownloaderCLI videodownload exited with code {process.ExitCode} for VOD {vodId}.");
+            }
         }
 
         private static readonly Regex _encoderNameRegex = new(@"\b(h264_amf|h264_nvenc|h264_qsv)\b", RegexOptions.Compiled);
@@ -275,10 +319,12 @@ namespace Vod2Tube.Application
             // ffmpeg writes progress lines to stderr in the form:
             //   frame=  100 fps= 60 q=28.0 size=  2048kB time=00:00:01.67 ...
             var statusQueue = new System.Collections.Concurrent.ConcurrentQueue<string>();
+            var errorOutput = new StringBuilder();
 
             process.ErrorDataReceived += (sender, e) =>
             {
                 if (string.IsNullOrEmpty(e.Data)) return;
+                errorOutput.AppendLine(e.Data);
                 var match = _ffmpegProgressRegex.Match(e.Data);
                 if (match.Success)
                 {
@@ -312,6 +358,9 @@ namespace Vod2Tube.Application
 
             if (process.ExitCode != 0)
             {
+                string errorText = errorOutput.ToString();
+                _logger.LogError("ffmpeg exited with code {ExitCode} while combining videos. Arguments: {Arguments}. Stderr: {Stderr}",
+                    process.ExitCode, arguments, errorText);
                 throw new InvalidOperationException($"ffmpeg exited with code {process.ExitCode} while combining videos.");
             }
         }
@@ -319,7 +368,7 @@ namespace Vod2Tube.Application
         public async IAsyncEnumerable<string> DownloadChatNewAsync(string vodId, DirectoryInfo tempDir, FileInfo finalFile, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             string arguments = $"chatdownload --id \"{vodId}\" --temp-path \"{tempDir.FullName}\" -o \"{finalFile.FullName}\" --collision overwrite";
- 
+
 
             var psi = new ProcessStartInfo
             {
@@ -337,6 +386,7 @@ namespace Vod2Tube.Application
 
             var regex = new Regex(@"^\[STATUS\] - (.*?) \[\d+/\d+\]$");
             var statusQueue = new System.Collections.Concurrent.ConcurrentQueue<string>();
+            var errorOutput = new StringBuilder();
             var outputReceived = new TaskCompletionSource<bool>();
 
             process.OutputDataReceived += (sender, e) =>
@@ -349,8 +399,17 @@ namespace Vod2Tube.Application
                 }
             };
 
+            process.ErrorDataReceived += (sender, e) =>
+            {
+                if (!string.IsNullOrEmpty(e.Data))
+                {
+                    errorOutput.AppendLine(e.Data);
+                }
+            };
+
             process.Start();
             process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
 
             var waitTask = process.WaitForExitAsync(cancellationToken);
 
@@ -370,6 +429,22 @@ namespace Vod2Tube.Application
             }
 
             await waitTask;
+
+            if (process.ExitCode != 0)
+            {
+                string errorText = errorOutput.ToString();
+
+                // Check for specific known errors
+                if (errorText.Contains("Invalid VOD, deleted/expired VOD possibly?", StringComparison.OrdinalIgnoreCase))
+                {
+                    _logger.LogWarning("VOD {VodId} is invalid, deleted, or expired. This will be counted as a failure.", vodId);
+                    throw new InvalidOperationException($"VOD {vodId} is invalid, deleted, or expired.");
+                }
+
+                _logger.LogError("TwitchDownloaderCLI chatdownload exited with code {ExitCode} for VOD {VodId}. Arguments: {Arguments}. Stderr: {Stderr}",
+                    process.ExitCode, vodId, arguments, errorText);
+                throw new InvalidOperationException($"TwitchDownloaderCLI chatdownload exited with code {process.ExitCode} for VOD {vodId}.");
+            }
         }
     }
 }
