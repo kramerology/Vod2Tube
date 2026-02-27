@@ -248,6 +248,7 @@ public class JobManagerTests
         await Assert.That(job.Failed).IsEqualTo(true);
         await Assert.That(job.FailCount).IsEqualTo(1);
         await Assert.That(job.FailReason).Contains("permanent");
+        await Assert.That(job.Stage).IsEqualTo("DownloadingVod");
     }
 
     [Test]
