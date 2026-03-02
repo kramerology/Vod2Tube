@@ -12,6 +12,9 @@ namespace Vod2Tube.Application
         private readonly IServiceScopeFactory _scopeFactory;
         private readonly ILogger<JobManager> _logger;
 
+        // Maximum number of total attempts before a transient failure is treated as permanent.
+        internal const int MaxRetryAttempts = 3;
+
         // Stages ordered from lowest to highest priority (furthest along = highest priority)
         internal static readonly string[] StagePriority =
         [
@@ -69,7 +72,7 @@ namespace Vod2Tube.Application
         internal static async Task<Pipeline?> FindHighestPriorityJobAsync(AppDbContext dbContext, CancellationToken ct)
         {
             return await dbContext.Pipelines
-                .Where(p => StagePriority.Contains(p.Stage))
+                .Where(p => StagePriority.Contains(p.Stage) && !p.Failed)
                 .OrderByDescending(p =>
                     p.Stage == "Uploading"            ? 9 :
                     p.Stage == "PendingUpload"        ? 8 :
@@ -87,6 +90,8 @@ namespace Vod2Tube.Application
 
         private static async Task SetStageAsync(AppDbContext dbContext, Pipeline job, string stage, CancellationToken ct)
         {
+            if (job.Stage != stage)
+                job.FailCount = 0;
             job.Stage = stage;
             await dbContext.SaveChangesAsync(ct);
         }
@@ -233,11 +238,25 @@ namespace Vod2Tube.Application
             catch (Exception ex)
             {
                 string failedAtStage = job.Stage;
-              //  job.Stage = "Failed";
-                job.Description = $"Failed at stage '{failedAtStage}': {ex.Message}";
+                bool isPermanent = ex is PipelineJobException pje && pje.IsPermanent;
+                string failMessage = $"Failed at stage '{failedAtStage}': {ex.Message}";
+
+                job.FailCount++;
+                job.Description = failMessage;
+
+                if (isPermanent || job.FailCount >= MaxRetryAttempts)
+                {
+                    job.Failed = true;
+                    job.FailReason = failMessage;
+                    logger.LogError(ex, "Job {VodId} permanently failed at stage '{Stage}' (FailCount={FailCount})", job.VodId, failedAtStage, job.FailCount);
+                }
+                else
+                {
+                    logger.LogWarning(ex, "Job {VodId} failed at stage '{Stage}' (FailCount={FailCount}), will retry", job.VodId, failedAtStage, job.FailCount);
+                }
+
                 try { await dbContext.SaveChangesAsync(CancellationToken.None); }
                 catch { /* best-effort */ }
-                logger.LogError(ex, "Job {VodId} failed at stage '{Stage}'", job.VodId, failedAtStage);
             }
         }
     }
