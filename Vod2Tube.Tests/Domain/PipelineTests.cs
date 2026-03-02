@@ -27,6 +27,20 @@ public class PipelineTests
         await Assert.That(pipeline.ChatVideoFilePath).IsEqualTo(string.Empty);
         await Assert.That(pipeline.FinalVideoFilePath).IsEqualTo(string.Empty);
         await Assert.That(pipeline.YoutubeVideoId).IsEqualTo(string.Empty);
+        await Assert.That(pipeline.FailReason).IsEqualTo(string.Empty);
+    }
+
+    /// <summary>
+    /// Default values for the new failure-tracking fields should be safe defaults.
+    /// </summary>
+    [Test]
+    public async Task Pipeline_FailureTrackingDefaults_AreCorrect()
+    {
+        var pipeline = new Pipeline();
+
+        await Assert.That(pipeline.Failed).IsEqualTo(false);
+        await Assert.That(pipeline.FailCount).IsEqualTo(0);
+        await Assert.That(pipeline.FailReason).IsEqualTo(string.Empty);
     }
 
     /// <summary>

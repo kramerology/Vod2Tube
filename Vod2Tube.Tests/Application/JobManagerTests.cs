@@ -218,20 +218,84 @@ public class JobManagerTests
     // ProcessJobToCompletionAsync — worker failure → job marked Failed
     // =========================================================================
 
-    //TODO: State is no longer saved as "Failed". Will add a Failed column in future.
-    //[Test]
-    //public async Task ProcessJob_WorkerThrows_MarksJobAsFailed_PreservingFailedStage()
-    //{
-    //    await using var ctx = CreateInMemoryContext(nameof(ProcessJob_WorkerThrows_MarksJobAsFailed_PreservingFailedStage));
-    //    var job = new Pipeline { VodId = "v1", Stage = "Pending" };
-    //    ctx.Pipelines.Add(job);
-    //    await ctx.SaveChangesAsync();
+    [Test]
+    public async Task ProcessJob_StageTransition_ResetsFailCount()
+    {
+        await using var ctx = CreateInMemoryContext(nameof(ProcessJob_StageTransition_ResetsFailCount));
+        // Simulate a job that already has 2 failures recorded at a prior stage.
+        var job = new Pipeline { VodId = "v1", Stage = "Pending", FailCount = 2 };
+        ctx.Pipelines.Add(job);
+        await ctx.SaveChangesAsync();
 
-    //    await JobManager.ProcessJobToCompletionAsync(job, ctx, CreateWorkerProvider(new ThrowingVodDownloader()), CancellationToken.None);
+        // One failure at DownloadingVod — but the stage change from Pending → DownloadingVod
+        // should reset FailCount to 0 first, so only 1 failure is counted here.
+        await JobManager.ProcessJobToCompletionAsync(job, ctx, CreateWorkerProvider(new ThrowingVodDownloader()), NullLogger.Instance, CancellationToken.None);
 
-    //    await Assert.That(job.Stage).IsEqualTo("Failed");
-    //    await Assert.That(job.Description).Contains("DownloadingVod");
-    //}
+        await Assert.That(job.Failed).IsEqualTo(false);
+        await Assert.That(job.FailCount).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task ProcessJob_WorkerThrows_MarksJobAsFailed_PreservingFailedStage()
+    {
+        await using var ctx = CreateInMemoryContext(nameof(ProcessJob_WorkerThrows_MarksJobAsFailed_PreservingFailedStage));
+        var job = new Pipeline { VodId = "v1", Stage = "Pending" };
+        ctx.Pipelines.Add(job);
+        await ctx.SaveChangesAsync();
+
+        // Three retryable failures push FailCount to 3, which triggers permanent failure.
+        for (int i = 0; i < 3; i++)
+            await JobManager.ProcessJobToCompletionAsync(job, ctx, CreateWorkerProvider(new ThrowingVodDownloader()), NullLogger.Instance, CancellationToken.None);
+
+        await Assert.That(job.Failed).IsEqualTo(true);
+        await Assert.That(job.FailCount).IsEqualTo(3);
+        await Assert.That(job.FailReason).Contains("DownloadingVod");
+    }
+
+    [Test]
+    public async Task ProcessJob_PermanentFailure_MarksJobFailedImmediately()
+    {
+        await using var ctx = CreateInMemoryContext(nameof(ProcessJob_PermanentFailure_MarksJobFailedImmediately));
+        var job = new Pipeline { VodId = "v1", Stage = "Pending" };
+        ctx.Pipelines.Add(job);
+        await ctx.SaveChangesAsync();
+
+        await JobManager.ProcessJobToCompletionAsync(job, ctx, CreateWorkerProvider(new PermanentlyFailingVodDownloader()), NullLogger.Instance, CancellationToken.None);
+
+        await Assert.That(job.Failed).IsEqualTo(true);
+        await Assert.That(job.FailCount).IsEqualTo(1);
+        await Assert.That(job.FailReason).Contains("permanent");
+        await Assert.That(job.Stage).IsEqualTo("DownloadingVod");
+    }
+
+    [Test]
+    public async Task ProcessJob_RetryableFailure_DoesNotMarkFailedUnderThreshold()
+    {
+        await using var ctx = CreateInMemoryContext(nameof(ProcessJob_RetryableFailure_DoesNotMarkFailedUnderThreshold));
+        var job = new Pipeline { VodId = "v1", Stage = "Pending" };
+        ctx.Pipelines.Add(job);
+        await ctx.SaveChangesAsync();
+
+        // Two retryable failures — should NOT be permanently failed yet.
+        for (int i = 0; i < 2; i++)
+            await JobManager.ProcessJobToCompletionAsync(job, ctx, CreateWorkerProvider(new ThrowingVodDownloader()), NullLogger.Instance, CancellationToken.None);
+
+        await Assert.That(job.Failed).IsEqualTo(false);
+        await Assert.That(job.FailCount).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task FindHighestPriorityJob_FailedFlagJobsIgnored()
+    {
+        await using var ctx = CreateInMemoryContext(nameof(FindHighestPriorityJob_FailedFlagJobsIgnored));
+        ctx.Pipelines.Add(new Pipeline { VodId = "broken",  Stage = "Pending", Failed = true });
+        ctx.Pipelines.Add(new Pipeline { VodId = "pending", Stage = "Pending" });
+        await ctx.SaveChangesAsync();
+
+        var result = await JobManager.FindHighestPriorityJobAsync(ctx, CancellationToken.None);
+
+        await Assert.That(result!.VodId).IsEqualTo("pending");
+    }
 
     /// <summary>
     /// A <see cref="VodDownloader"/> stub that always throws from <see cref="RunAsync"/>.
@@ -242,5 +306,17 @@ public class JobManagerTests
 
         public override IAsyncEnumerable<string> RunAsync(string vodId, CancellationToken ct)
             => throw new InvalidOperationException("Simulated download failure");
+    }
+
+    /// <summary>
+    /// A <see cref="VodDownloader"/> stub that throws a permanent
+    /// <see cref="PipelineJobException"/> from <see cref="RunAsync"/>.
+    /// </summary>
+    private sealed class PermanentlyFailingVodDownloader : VodDownloader
+    {
+        public PermanentlyFailingVodDownloader() : base(null!) { }
+
+        public override IAsyncEnumerable<string> RunAsync(string vodId, CancellationToken ct)
+            => throw new PipelineJobException("Simulated permanent failure", isPermanent: true);
     }
 }
