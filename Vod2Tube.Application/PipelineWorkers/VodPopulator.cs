@@ -38,6 +38,7 @@ namespace Vod2Tube.Application
                     List<string> channelNames = await dbContext.Channels
                         .Where(c => c.Active)
                         .Select(c => c.ChannelName)
+                        .Distinct()
                         .ToListAsync(stoppingToken);
 
                     if (channelNames.Count == 0)
