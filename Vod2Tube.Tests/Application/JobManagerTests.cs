@@ -28,7 +28,7 @@ public class JobManagerTests
     /// Builds a minimal <see cref="IServiceProvider"/> with all pipeline workers registered.
     /// Optionally substitutes the <see cref="VodDownloader"/> with a custom subclass.
     /// </summary>
-    private static IServiceProvider CreateWorkerProvider(VodDownloader? vodDownloader = null)
+    private static IServiceProvider CreateWorkerProvider(VodDownloader? vodDownloader = null, VideoUploader? videoUploader = null)
     {
         var svc = new ServiceCollection();
         svc.AddDbContext<AppDbContext>(o => o.UseInMemoryDatabase("WorkerProvider"));
@@ -41,7 +41,10 @@ public class JobManagerTests
         svc.AddSingleton<ChatDownloader>();
         svc.AddSingleton<ChatRenderer>();
         svc.AddSingleton<FinalRenderer>();
-        svc.AddSingleton<VideoUploader>();
+        if (videoUploader != null)
+            svc.AddSingleton(videoUploader);
+        else
+            svc.AddSingleton<VideoUploader>();
         return svc.BuildServiceProvider();
     }
 
@@ -339,24 +342,39 @@ public class JobManagerTests
         ctx.Pipelines.Add(job);
         await ctx.SaveChangesAsync();
 
+        // Create output files for all stages so every stage is skipped
         var vodDownloader = new VodDownloader(null!);
+        var chatDownloader = new ChatDownloader(null!);
+        var chatRenderer = new ChatRenderer(null!);
+        var finalRenderer = new FinalRenderer(null!);
+
         string vodOutputPath = vodDownloader.GetOutputPath("v1");
+        string chatOutputPath = chatDownloader.GetOutputPath("v1");
+        string chatVideoOutputPath = chatRenderer.GetOutputPath("v1");
+        string finalOutputPath = finalRenderer.GetOutputPath("v1");
+
         Directory.CreateDirectory(Path.GetDirectoryName(vodOutputPath)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(chatOutputPath)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(chatVideoOutputPath)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(finalOutputPath)!);
+
         File.WriteAllText(vodOutputPath, "fake vod");
+        File.WriteAllText(chatOutputPath, "fake chat");
+        File.WriteAllText(chatVideoOutputPath, "fake chat video");
+        File.WriteAllText(finalOutputPath, "fake final video");
         try
         {
-            await JobManager.ProcessJobToCompletionAsync(job, ctx, CreateWorkerProvider(), NullLogger.Instance, CancellationToken.None);
+            await JobManager.ProcessJobToCompletionAsync(job, ctx, CreateWorkerProvider(videoUploader: new StubVideoUploader()), NullLogger.Instance, CancellationToken.None);
 
-            // Should have skipped past download and set the path
             await Assert.That(job.VodFilePath).IsEqualTo(vodOutputPath);
-            // Stage should have advanced past DownloadingVod (exact stage depends on what happens next,
-            // but it should NOT be Pending or DownloadingVod)
-            await Assert.That(job.Stage).IsNotEqualTo("Pending");
-            await Assert.That(job.Stage).IsNotEqualTo("DownloadingVod");
+            await Assert.That(job.Stage).IsEqualTo("Uploaded");
         }
         finally
         {
             File.Delete(vodOutputPath);
+            File.Delete(chatOutputPath);
+            File.Delete(chatVideoOutputPath);
+            File.Delete(finalOutputPath);
         }
     }
 
@@ -364,25 +382,42 @@ public class JobManagerTests
     public async Task ProcessJob_DownloadingChat_OutputExists_SkipsToNextStage()
     {
         await using var ctx = CreateInMemoryContext(nameof(ProcessJob_DownloadingChat_OutputExists_SkipsToNextStage));
-        var job = new Pipeline { VodId = "v2", Stage = "PendingDownloadChat" };
+
+        // Create output files for all downstream stages
+        var chatDownloader = new ChatDownloader(null!);
+        var chatRenderer = new ChatRenderer(null!);
+        var finalRenderer = new FinalRenderer(null!);
+
+        string vodTempFile = Path.GetTempFileName();
+        string chatOutputPath = chatDownloader.GetOutputPath("v2");
+        string chatVideoOutputPath = chatRenderer.GetOutputPath("v2");
+        string finalOutputPath = finalRenderer.GetOutputPath("v2");
+
+        Directory.CreateDirectory(Path.GetDirectoryName(chatOutputPath)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(chatVideoOutputPath)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(finalOutputPath)!);
+
+        File.WriteAllText(chatOutputPath, "fake chat");
+        File.WriteAllText(chatVideoOutputPath, "fake chat video");
+        File.WriteAllText(finalOutputPath, "fake final video");
+
+        var job = new Pipeline { VodId = "v2", Stage = "PendingDownloadChat", VodFilePath = vodTempFile };
         ctx.Pipelines.Add(job);
         await ctx.SaveChangesAsync();
 
-        var chatDownloader = new ChatDownloader(null!);
-        string chatOutputPath = chatDownloader.GetOutputPath("v2");
-        Directory.CreateDirectory(Path.GetDirectoryName(chatOutputPath)!);
-        File.WriteAllText(chatOutputPath, "fake chat");
         try
         {
-            await JobManager.ProcessJobToCompletionAsync(job, ctx, CreateWorkerProvider(), NullLogger.Instance, CancellationToken.None);
+            await JobManager.ProcessJobToCompletionAsync(job, ctx, CreateWorkerProvider(videoUploader: new StubVideoUploader()), NullLogger.Instance, CancellationToken.None);
 
             await Assert.That(job.ChatTextFilePath).IsEqualTo(chatOutputPath);
-            await Assert.That(job.Stage).IsNotEqualTo("PendingDownloadChat");
-            await Assert.That(job.Stage).IsNotEqualTo("DownloadingChat");
+            await Assert.That(job.Stage).IsEqualTo("Uploaded");
         }
         finally
         {
+            File.Delete(vodTempFile);
             File.Delete(chatOutputPath);
+            File.Delete(chatVideoOutputPath);
+            File.Delete(finalOutputPath);
         }
     }
 
@@ -490,5 +525,20 @@ public class JobManagerTests
 
         public override IAsyncEnumerable<string> RunAsync(string vodId, CancellationToken ct)
             => throw new PipelineJobException("Simulated permanent failure", isPermanent: true);
+    }
+
+    /// <summary>
+    /// A <see cref="VideoUploader"/> stub that completes immediately without performing a real upload.
+    /// </summary>
+    private sealed class StubVideoUploader : VideoUploader
+    {
+        public StubVideoUploader() : base(null!) { }
+
+        public override async IAsyncEnumerable<string> RunAsync(string vodId, string finalFilePath,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+        {
+            await Task.CompletedTask;
+            yield return "Stub upload complete";
+        }
     }
 }
