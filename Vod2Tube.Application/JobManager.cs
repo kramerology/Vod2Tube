@@ -132,7 +132,10 @@ namespace Vod2Tube.Application
                                 catch (Exception ex) { logger.LogWarning(ex, "Failed to save progress for job {VodId}", job.VodId); }
                             }
                         }
-                        job.VodFilePath = vodDownloader.GetOutputPath(job.VodId);
+                        string vodOutput = vodDownloader.GetOutputPath(job.VodId);
+                        if (!File.Exists(vodOutput))
+                            throw new InvalidOperationException($"VOD download completed but output file not found: {vodOutput}");
+                        job.VodFilePath = vodOutput;
                         await SetStageAsync(dbContext, job, "PendingDownloadChat", ct);
                     }
                 }
@@ -162,6 +165,8 @@ namespace Vod2Tube.Application
                             }
                         }
                         job.ChatTextFilePath = chatDownloader.GetOutputPath(job.VodId);
+                        if (!File.Exists(job.ChatTextFilePath))
+                            throw new InvalidOperationException($"Chat download completed but output file not found: {job.ChatTextFilePath}");
                         await dbContext.SaveChangesAsync(ct);
                         await SetStageAsync(dbContext, job, "PendingRenderingChat", ct);
                     }
@@ -206,6 +211,8 @@ namespace Vod2Tube.Application
                             }
                         }
                         job.ChatVideoFilePath = chatRenderer.GetOutputPath(job.VodId);
+                        if (!File.Exists(job.ChatVideoFilePath))
+                            throw new InvalidOperationException($"Chat render completed but output file not found: {job.ChatVideoFilePath}");
                         await dbContext.SaveChangesAsync(ct);
                         await SetStageAsync(dbContext, job, "PendingCombining", ct);
                     }
@@ -250,6 +257,8 @@ namespace Vod2Tube.Application
                             }
                         }
                         job.FinalVideoFilePath = finalRenderer.GetOutputPath(job.VodId);
+                        if (!File.Exists(job.FinalVideoFilePath))
+                            throw new InvalidOperationException($"Video combine completed but output file not found: {job.FinalVideoFilePath}");
                         await dbContext.SaveChangesAsync(ct);
                         await SetStageAsync(dbContext, job, "PendingUpload", ct);
                     }

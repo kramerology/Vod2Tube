@@ -78,6 +78,11 @@ namespace Vod2Tube.Application
 
         public async IAsyncEnumerable<string> RenderChatVideoAsync(FileInfo chatFile, FileInfo vodFile, DirectoryInfo tempDir, FileInfo finalFile, CancellationToken cancellationToken = default)
         {
+            if (!chatFile.Exists)
+                throw new FileNotFoundException($"Chat file not found: {chatFile.FullName}");
+            if (!vodFile.Exists)
+                throw new FileNotFoundException($"VOD file not found: {vodFile.FullName}");
+
             int chatWidth  = 350;      // width of chat panel in pixels
             int fontSize   = 15;       // base font size for chat text //11 too small
             int updateRate = 0;        // render each frame exactly (no interpolation)
@@ -296,6 +301,11 @@ namespace Vod2Tube.Application
 
         public async IAsyncEnumerable<string> CombineVideosAsync(FileInfo vodFile, FileInfo chatVideoFile, FileInfo outputFile, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
+            if (!vodFile.Exists)
+                throw new FileNotFoundException($"VOD file not found: {vodFile.FullName}");
+            if (!chatVideoFile.Exists)
+                throw new FileNotFoundException($"Chat video file not found: {chatVideoFile.FullName}");
+
             string encoder = _cachedEncoder.Value;
 
             string pixelFormat = encoder == "libx264" ? "yuv420p" : "nv12";
