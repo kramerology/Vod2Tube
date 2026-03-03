@@ -537,7 +537,6 @@ public class JobManagerTests
         public override async IAsyncEnumerable<string> RunAsync(string vodId, string finalFilePath,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
         {
-            await Task.CompletedTask;
             yield return "Stub upload complete";
         }
     }
