@@ -112,15 +112,18 @@ namespace Vod2Tube.Application
                 {
                     await SetStageAsync(dbContext, job, "DownloadingVod", ct);
 
-                    string vodOutputPath = vodDownloader.GetOutputPath(job.VodId);
-                    if (File.Exists(vodOutputPath))
+                    if (!string.IsNullOrEmpty(job.VodFilePath) && File.Exists(job.VodFilePath))
                     {
-                        logger.LogInformation("VOD file already exists at {Path} for job {VodId}, skipping download", vodOutputPath, job.VodId);
-                        job.VodFilePath = vodOutputPath;
+                        logger.LogInformation("VOD file already exists at {Path} for job {VodId}, skipping download", job.VodFilePath, job.VodId);
                         await SetStageAsync(dbContext, job, "PendingDownloadChat", ct);
                     }
                     else
                     {
+                        if (!string.IsNullOrEmpty(job.VodFilePath))
+                        {
+                            logger.LogWarning("VOD file path {Path} from database not found on disk for job {VodId}, re-downloading", job.VodFilePath, job.VodId);
+                            job.VodFilePath = "";
+                        }
                         DateTime lastUpdate = DateTime.MinValue;
                         await foreach (var status in vodDownloader.RunAsync(job.VodId, ct))
                         {
@@ -144,15 +147,18 @@ namespace Vod2Tube.Application
                 {
                     await SetStageAsync(dbContext, job, "DownloadingChat", ct);
 
-                    string chatOutputPath = chatDownloader.GetOutputPath(job.VodId);
-                    if (File.Exists(chatOutputPath))
+                    if (!string.IsNullOrEmpty(job.ChatTextFilePath) && File.Exists(job.ChatTextFilePath))
                     {
-                        logger.LogInformation("Chat file already exists at {Path} for job {VodId}, skipping download", chatOutputPath, job.VodId);
-                        job.ChatTextFilePath = chatOutputPath;
+                        logger.LogInformation("Chat file already exists at {Path} for job {VodId}, skipping download", job.ChatTextFilePath, job.VodId);
                         await SetStageAsync(dbContext, job, "PendingRenderingChat", ct);
                     }
                     else
                     {
+                        if (!string.IsNullOrEmpty(job.ChatTextFilePath))
+                        {
+                            logger.LogWarning("Chat file path {Path} from database not found on disk for job {VodId}, re-downloading", job.ChatTextFilePath, job.VodId);
+                            job.ChatTextFilePath = "";
+                        }
                         DateTime lastUpdate = DateTime.MinValue;
                         await foreach (var status in chatDownloader.RunAsync(job.VodId, ct))
                         {
@@ -189,15 +195,18 @@ namespace Vod2Tube.Application
                         return;
                     }
 
-                    string chatVideoOutputPath = chatRenderer.GetOutputPath(job.VodId);
-                    if (File.Exists(chatVideoOutputPath))
+                    if (!string.IsNullOrEmpty(job.ChatVideoFilePath) && File.Exists(job.ChatVideoFilePath))
                     {
-                        logger.LogInformation("Chat video already exists at {Path} for job {VodId}, skipping render", chatVideoOutputPath, job.VodId);
-                        job.ChatVideoFilePath = chatVideoOutputPath;
+                        logger.LogInformation("Chat video already exists at {Path} for job {VodId}, skipping render", job.ChatVideoFilePath, job.VodId);
                         await SetStageAsync(dbContext, job, "PendingCombining", ct);
                     }
                     else
                     {
+                        if (!string.IsNullOrEmpty(job.ChatVideoFilePath))
+                        {
+                            logger.LogWarning("Chat video path {Path} from database not found on disk for job {VodId}, re-rendering", job.ChatVideoFilePath, job.VodId);
+                            job.ChatVideoFilePath = "";
+                        }
                         await SetStageAsync(dbContext, job, "RenderingChat", ct);
                         DateTime lastUpdate = DateTime.MinValue;
                         await foreach (var status in chatRenderer.RunAsync(job.VodId, job.ChatTextFilePath, job.VodFilePath, ct))
@@ -235,15 +244,18 @@ namespace Vod2Tube.Application
                         return;
                     }
 
-                    string finalOutputPath = finalRenderer.GetOutputPath(job.VodId);
-                    if (File.Exists(finalOutputPath))
+                    if (!string.IsNullOrEmpty(job.FinalVideoFilePath) && File.Exists(job.FinalVideoFilePath))
                     {
-                        logger.LogInformation("Final video already exists at {Path} for job {VodId}, skipping combine", finalOutputPath, job.VodId);
-                        job.FinalVideoFilePath = finalOutputPath;
+                        logger.LogInformation("Final video already exists at {Path} for job {VodId}, skipping combine", job.FinalVideoFilePath, job.VodId);
                         await SetStageAsync(dbContext, job, "PendingUpload", ct);
                     }
                     else
                     {
+                        if (!string.IsNullOrEmpty(job.FinalVideoFilePath))
+                        {
+                            logger.LogWarning("Final video path {Path} from database not found on disk for job {VodId}, re-combining", job.FinalVideoFilePath, job.VodId);
+                            job.FinalVideoFilePath = "";
+                        }
                         await SetStageAsync(dbContext, job, "Combining", ct);
                         DateTime lastUpdate = DateTime.MinValue;
                         await foreach (var status in finalRenderer.RunAsync(job.VodId, job.VodFilePath, job.ChatVideoFilePath, ct))
