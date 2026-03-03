@@ -35,7 +35,18 @@ namespace Vod2Tube.Application
 
                     await dbContext.Database.EnsureCreatedAsync();
 
-                    List<string> channelNames = ["test"];
+                    List<string> channelNames = await dbContext.Channels
+                        .Where(c => c.Active)
+                        .Select(c => c.ChannelName)
+                        .ToListAsync(stoppingToken);
+
+                    if (channelNames.Count == 0)
+                    {
+                        _logger.LogWarning("No active channels found in database. Waiting 5 minutes before checking again.");
+                        continue;
+                    }
+
+                    _logger.LogInformation("Processing {Count} active channel(s)", channelNames.Count);
 
                     foreach (string channel in channelNames)
                     {
