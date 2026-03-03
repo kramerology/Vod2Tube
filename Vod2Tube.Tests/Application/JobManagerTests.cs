@@ -338,11 +338,8 @@ public class JobManagerTests
     public async Task ProcessJob_DownloadingVod_OutputExists_SkipsToNextStage()
     {
         await using var ctx = CreateInMemoryContext(nameof(ProcessJob_DownloadingVod_OutputExists_SkipsToNextStage));
-        var job = new Pipeline { VodId = "v1", Stage = "Pending" };
-        ctx.Pipelines.Add(job);
-        await ctx.SaveChangesAsync();
 
-        // Create output files for all stages so every stage is skipped
+        // Compute all output paths first, then create the job with them pre-populated in the DB
         var vodDownloader = new VodDownloader(null!);
         var chatDownloader = new ChatDownloader(null!);
         var chatRenderer = new ChatRenderer(null!);
@@ -362,6 +359,19 @@ public class JobManagerTests
         File.WriteAllText(chatOutputPath, "fake chat");
         File.WriteAllText(chatVideoOutputPath, "fake chat video");
         File.WriteAllText(finalOutputPath, "fake final video");
+
+        // All paths come from the database — the skip logic reads job.VodFilePath etc.
+        var job = new Pipeline
+        {
+            VodId = "v1",
+            Stage = "Pending",
+            VodFilePath = vodOutputPath,
+            ChatTextFilePath = chatOutputPath,
+            ChatVideoFilePath = chatVideoOutputPath,
+            FinalVideoFilePath = finalOutputPath
+        };
+        ctx.Pipelines.Add(job);
+        await ctx.SaveChangesAsync();
         try
         {
             await JobManager.ProcessJobToCompletionAsync(job, ctx, CreateWorkerProvider(videoUploader: new StubVideoUploader()), NullLogger.Instance, CancellationToken.None);
@@ -401,7 +411,16 @@ public class JobManagerTests
         File.WriteAllText(chatVideoOutputPath, "fake chat video");
         File.WriteAllText(finalOutputPath, "fake final video");
 
-        var job = new Pipeline { VodId = "v2", Stage = "PendingDownloadChat", VodFilePath = vodTempFile };
+        // All downstream paths come from the database — the skip logic reads job.ChatTextFilePath etc.
+        var job = new Pipeline
+        {
+            VodId = "v2",
+            Stage = "PendingDownloadChat",
+            VodFilePath = vodTempFile,
+            ChatTextFilePath = chatOutputPath,
+            ChatVideoFilePath = chatVideoOutputPath,
+            FinalVideoFilePath = finalOutputPath
+        };
         ctx.Pipelines.Add(job);
         await ctx.SaveChangesAsync();
 
