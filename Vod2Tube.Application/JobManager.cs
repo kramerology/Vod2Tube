@@ -111,104 +111,156 @@ namespace Vod2Tube.Application
                 if (job.Stage == "Pending" || job.Stage == "DownloadingVod")
                 {
                     await SetStageAsync(dbContext, job, "DownloadingVod", ct);
-                    DateTime lastUpdate = DateTime.MinValue;
-                    await foreach (var status in vodDownloader.RunAsync(job.VodId, ct))
+
+                    string vodOutputPath = vodDownloader.GetOutputPath(job.VodId);
+                    if (File.Exists(vodOutputPath))
                     {
-                        if (DateTime.UtcNow - lastUpdate >= TimeSpan.FromSeconds(2))
-                        {
-                            lastUpdate = DateTime.UtcNow;
-                            job.Description = status;
-                            try { await dbContext.SaveChangesAsync(ct); }
-                            catch (Exception ex) { logger.LogWarning(ex, "Failed to save progress for job {VodId}", job.VodId); }
-                        }
+                        logger.LogInformation("VOD file already exists at {Path} for job {VodId}, skipping download", vodOutputPath, job.VodId);
+                        job.VodFilePath = vodOutputPath;
+                        await SetStageAsync(dbContext, job, "PendingDownloadChat", ct);
                     }
-                    job.VodFilePath = vodDownloader.GetOutputPath(job.VodId);
-                    await SetStageAsync(dbContext, job, "PendingDownloadChat", ct);
+                    else
+                    {
+                        DateTime lastUpdate = DateTime.MinValue;
+                        await foreach (var status in vodDownloader.RunAsync(job.VodId, ct))
+                        {
+                            if (DateTime.UtcNow - lastUpdate >= TimeSpan.FromSeconds(2))
+                            {
+                                lastUpdate = DateTime.UtcNow;
+                                job.Description = status;
+                                try { await dbContext.SaveChangesAsync(ct); }
+                                catch (Exception ex) { logger.LogWarning(ex, "Failed to save progress for job {VodId}", job.VodId); }
+                            }
+                        }
+                        job.VodFilePath = vodDownloader.GetOutputPath(job.VodId);
+                        await SetStageAsync(dbContext, job, "PendingDownloadChat", ct);
+                    }
                 }
 
                 if (job.Stage == "PendingDownloadChat" || job.Stage == "DownloadingChat")
                 {
                     await SetStageAsync(dbContext, job, "DownloadingChat", ct);
-                    DateTime lastUpdate = DateTime.MinValue;
-                    await foreach (var status in chatDownloader.RunAsync(job.VodId, ct))
+
+                    string chatOutputPath = chatDownloader.GetOutputPath(job.VodId);
+                    if (File.Exists(chatOutputPath))
                     {
-                        if (DateTime.UtcNow - lastUpdate >= TimeSpan.FromSeconds(2))
-                        {
-                            lastUpdate = DateTime.UtcNow;
-                            job.Description = status;
-                            try { await dbContext.SaveChangesAsync(ct); }
-                            catch (Exception ex) { logger.LogWarning(ex, "Failed to save progress for job {VodId}", job.VodId); }
-                        }
+                        logger.LogInformation("Chat file already exists at {Path} for job {VodId}, skipping download", chatOutputPath, job.VodId);
+                        job.ChatTextFilePath = chatOutputPath;
+                        await SetStageAsync(dbContext, job, "PendingRenderingChat", ct);
                     }
-                    job.ChatTextFilePath = chatDownloader.GetOutputPath(job.VodId);
-                    await dbContext.SaveChangesAsync(ct);
-                    await SetStageAsync(dbContext, job, "PendingRenderingChat", ct);
+                    else
+                    {
+                        DateTime lastUpdate = DateTime.MinValue;
+                        await foreach (var status in chatDownloader.RunAsync(job.VodId, ct))
+                        {
+                            if (DateTime.UtcNow - lastUpdate >= TimeSpan.FromSeconds(2))
+                            {
+                                lastUpdate = DateTime.UtcNow;
+                                job.Description = status;
+                                try { await dbContext.SaveChangesAsync(ct); }
+                                catch (Exception ex) { logger.LogWarning(ex, "Failed to save progress for job {VodId}", job.VodId); }
+                            }
+                        }
+                        job.ChatTextFilePath = chatDownloader.GetOutputPath(job.VodId);
+                        await dbContext.SaveChangesAsync(ct);
+                        await SetStageAsync(dbContext, job, "PendingRenderingChat", ct);
+                    }
                 }
 
                 if (job.Stage == "PendingRenderingChat" || job.Stage == "RenderingChat")
                 {
-                    if (string.IsNullOrEmpty(job.VodFilePath))
+                    if (string.IsNullOrEmpty(job.VodFilePath) || !File.Exists(job.VodFilePath))
                     {
+                        logger.LogWarning("VOD file missing for job {VodId}, rolling back to Pending", job.VodId);
+                        job.VodFilePath = "";
                         await SetStageAsync(dbContext, job, "Pending", ct);
                         return;
                     }
-                    if (string.IsNullOrEmpty(job.ChatTextFilePath))
+                    if (string.IsNullOrEmpty(job.ChatTextFilePath) || !File.Exists(job.ChatTextFilePath))
                     {
+                        logger.LogWarning("Chat text file missing for job {VodId}, rolling back to PendingDownloadChat", job.VodId);
+                        job.ChatTextFilePath = "";
                         await SetStageAsync(dbContext, job, "PendingDownloadChat", ct);
                         return;
                     }
 
-                    await SetStageAsync(dbContext, job, "RenderingChat", ct);
-                    DateTime lastUpdate = DateTime.MinValue;
-                    await foreach (var status in chatRenderer.RunAsync(job.VodId, job.ChatTextFilePath, job.VodFilePath, ct))
+                    string chatVideoOutputPath = chatRenderer.GetOutputPath(job.VodId);
+                    if (File.Exists(chatVideoOutputPath))
                     {
-                        if (DateTime.UtcNow - lastUpdate >= TimeSpan.FromSeconds(2))
-                        {
-                            lastUpdate = DateTime.UtcNow;
-                            job.Description = status;
-                            try { await dbContext.SaveChangesAsync(ct); }
-                            catch (Exception ex) { logger.LogWarning(ex, "Failed to save progress for job {VodId}", job.VodId); }
-                        }
+                        logger.LogInformation("Chat video already exists at {Path} for job {VodId}, skipping render", chatVideoOutputPath, job.VodId);
+                        job.ChatVideoFilePath = chatVideoOutputPath;
+                        await SetStageAsync(dbContext, job, "PendingCombining", ct);
                     }
-                    job.ChatVideoFilePath = chatRenderer.GetOutputPath(job.VodId);
-                    await dbContext.SaveChangesAsync(ct);
-                    await SetStageAsync(dbContext, job, "PendingCombining", ct);
+                    else
+                    {
+                        await SetStageAsync(dbContext, job, "RenderingChat", ct);
+                        DateTime lastUpdate = DateTime.MinValue;
+                        await foreach (var status in chatRenderer.RunAsync(job.VodId, job.ChatTextFilePath, job.VodFilePath, ct))
+                        {
+                            if (DateTime.UtcNow - lastUpdate >= TimeSpan.FromSeconds(2))
+                            {
+                                lastUpdate = DateTime.UtcNow;
+                                job.Description = status;
+                                try { await dbContext.SaveChangesAsync(ct); }
+                                catch (Exception ex) { logger.LogWarning(ex, "Failed to save progress for job {VodId}", job.VodId); }
+                            }
+                        }
+                        job.ChatVideoFilePath = chatRenderer.GetOutputPath(job.VodId);
+                        await dbContext.SaveChangesAsync(ct);
+                        await SetStageAsync(dbContext, job, "PendingCombining", ct);
+                    }
                 }
 
                 if (job.Stage == "PendingCombining" || job.Stage == "Combining")
                 {
-                    if (string.IsNullOrEmpty(job.VodFilePath))
+                    if (string.IsNullOrEmpty(job.VodFilePath) || !File.Exists(job.VodFilePath))
                     {
+                        logger.LogWarning("VOD file missing for job {VodId}, rolling back to Pending", job.VodId);
+                        job.VodFilePath = "";
                         await SetStageAsync(dbContext, job, "Pending", ct);
                         return;
                     }
-                    if (string.IsNullOrEmpty(job.ChatVideoFilePath))
+                    if (string.IsNullOrEmpty(job.ChatVideoFilePath) || !File.Exists(job.ChatVideoFilePath))
                     {
+                        logger.LogWarning("Chat video file missing for job {VodId}, rolling back to PendingRenderingChat", job.VodId);
+                        job.ChatVideoFilePath = "";
                         await SetStageAsync(dbContext, job, "PendingRenderingChat", ct);
                         return;
                     }
 
-                    await SetStageAsync(dbContext, job, "Combining", ct);
-                    DateTime lastUpdate = DateTime.MinValue;
-                    await foreach (var status in finalRenderer.RunAsync(job.VodId, job.VodFilePath, job.ChatVideoFilePath, ct))
+                    string finalOutputPath = finalRenderer.GetOutputPath(job.VodId);
+                    if (File.Exists(finalOutputPath))
                     {
-                        if (DateTime.UtcNow - lastUpdate >= TimeSpan.FromSeconds(2))
-                        {
-                            lastUpdate = DateTime.UtcNow;
-                            job.Description = status;
-                            try { await dbContext.SaveChangesAsync(ct); }
-                            catch (Exception ex) { logger.LogWarning(ex, "Failed to save progress for job {VodId}", job.VodId); }
-                        }
+                        logger.LogInformation("Final video already exists at {Path} for job {VodId}, skipping combine", finalOutputPath, job.VodId);
+                        job.FinalVideoFilePath = finalOutputPath;
+                        await SetStageAsync(dbContext, job, "PendingUpload", ct);
                     }
-                    job.FinalVideoFilePath = finalRenderer.GetOutputPath(job.VodId);
-                    await dbContext.SaveChangesAsync(ct);
-                    await SetStageAsync(dbContext, job, "PendingUpload", ct);
+                    else
+                    {
+                        await SetStageAsync(dbContext, job, "Combining", ct);
+                        DateTime lastUpdate = DateTime.MinValue;
+                        await foreach (var status in finalRenderer.RunAsync(job.VodId, job.VodFilePath, job.ChatVideoFilePath, ct))
+                        {
+                            if (DateTime.UtcNow - lastUpdate >= TimeSpan.FromSeconds(2))
+                            {
+                                lastUpdate = DateTime.UtcNow;
+                                job.Description = status;
+                                try { await dbContext.SaveChangesAsync(ct); }
+                                catch (Exception ex) { logger.LogWarning(ex, "Failed to save progress for job {VodId}", job.VodId); }
+                            }
+                        }
+                        job.FinalVideoFilePath = finalRenderer.GetOutputPath(job.VodId);
+                        await dbContext.SaveChangesAsync(ct);
+                        await SetStageAsync(dbContext, job, "PendingUpload", ct);
+                    }
                 }
 
                 if (job.Stage == "PendingUpload" || job.Stage == "Uploading")
                 {
-                    if (string.IsNullOrEmpty(job.FinalVideoFilePath))
+                    if (string.IsNullOrEmpty(job.FinalVideoFilePath) || !File.Exists(job.FinalVideoFilePath))
                     {
+                        logger.LogWarning("Final video file missing for job {VodId}, rolling back to PendingCombining", job.VodId);
+                        job.FinalVideoFilePath = "";
                         job.Description = "Final video file missing, rerunning combining stage.";
                         await SetStageAsync(dbContext, job, "PendingCombining", ct);
                         return;

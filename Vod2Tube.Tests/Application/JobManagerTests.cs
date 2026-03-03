@@ -166,13 +166,21 @@ public class JobManagerTests
     public async Task ProcessJob_PendingRenderingChat_MissingChatTextFilePath_RollsBackToPendingDownloadChat()
     {
         await using var ctx = CreateInMemoryContext(nameof(ProcessJob_PendingRenderingChat_MissingChatTextFilePath_RollsBackToPendingDownloadChat));
-        var job = new Pipeline { VodId = "v1", Stage = "PendingRenderingChat", VodFilePath = "/vod.mp4", ChatTextFilePath = "" };
-        ctx.Pipelines.Add(job);
-        await ctx.SaveChangesAsync();
+        string tempVod = Path.GetTempFileName();
+        try
+        {
+            var job = new Pipeline { VodId = "v1", Stage = "PendingRenderingChat", VodFilePath = tempVod, ChatTextFilePath = "" };
+            ctx.Pipelines.Add(job);
+            await ctx.SaveChangesAsync();
 
-        await JobManager.ProcessJobToCompletionAsync(job, ctx, CreateWorkerProvider(), NullLogger.Instance, CancellationToken.None);
+            await JobManager.ProcessJobToCompletionAsync(job, ctx, CreateWorkerProvider(), NullLogger.Instance, CancellationToken.None);
 
-        await Assert.That(job.Stage).IsEqualTo("PendingDownloadChat");
+            await Assert.That(job.Stage).IsEqualTo("PendingDownloadChat");
+        }
+        finally
+        {
+            File.Delete(tempVod);
+        }
     }
 
     [Test]
@@ -192,13 +200,21 @@ public class JobManagerTests
     public async Task ProcessJob_PendingCombining_MissingChatVideoFilePath_RollsBackToPendingRenderingChat()
     {
         await using var ctx = CreateInMemoryContext(nameof(ProcessJob_PendingCombining_MissingChatVideoFilePath_RollsBackToPendingRenderingChat));
-        var job = new Pipeline { VodId = "v1", Stage = "PendingCombining", VodFilePath = "/vod.mp4", ChatVideoFilePath = "" };
-        ctx.Pipelines.Add(job);
-        await ctx.SaveChangesAsync();
+        string tempVod = Path.GetTempFileName();
+        try
+        {
+            var job = new Pipeline { VodId = "v1", Stage = "PendingCombining", VodFilePath = tempVod, ChatVideoFilePath = "" };
+            ctx.Pipelines.Add(job);
+            await ctx.SaveChangesAsync();
 
-        await JobManager.ProcessJobToCompletionAsync(job, ctx, CreateWorkerProvider(), NullLogger.Instance, CancellationToken.None);
+            await JobManager.ProcessJobToCompletionAsync(job, ctx, CreateWorkerProvider(), NullLogger.Instance, CancellationToken.None);
 
-        await Assert.That(job.Stage).IsEqualTo("PendingRenderingChat");
+            await Assert.That(job.Stage).IsEqualTo("PendingRenderingChat");
+        }
+        finally
+        {
+            File.Delete(tempVod);
+        }
     }
 
     [Test]
@@ -212,6 +228,155 @@ public class JobManagerTests
         await JobManager.ProcessJobToCompletionAsync(job, ctx, CreateWorkerProvider(), NullLogger.Instance, CancellationToken.None);
 
         await Assert.That(job.Stage).IsEqualTo("PendingCombining");
+    }
+
+    // =========================================================================
+    // ProcessJobToCompletionAsync — file-not-found-on-disk rollback tests
+    // =========================================================================
+
+    [Test]
+    public async Task ProcessJob_PendingRenderingChat_VodFileNotOnDisk_RollsBackToPending()
+    {
+        await using var ctx = CreateInMemoryContext(nameof(ProcessJob_PendingRenderingChat_VodFileNotOnDisk_RollsBackToPending));
+        var job = new Pipeline { VodId = "v1", Stage = "PendingRenderingChat", VodFilePath = "/nonexistent/vod.mp4", ChatTextFilePath = "/chat.json" };
+        ctx.Pipelines.Add(job);
+        await ctx.SaveChangesAsync();
+
+        await JobManager.ProcessJobToCompletionAsync(job, ctx, CreateWorkerProvider(), NullLogger.Instance, CancellationToken.None);
+
+        await Assert.That(job.Stage).IsEqualTo("Pending");
+        await Assert.That(job.VodFilePath).IsEqualTo("");
+    }
+
+    [Test]
+    public async Task ProcessJob_PendingRenderingChat_ChatFileNotOnDisk_RollsBackToPendingDownloadChat()
+    {
+        await using var ctx = CreateInMemoryContext(nameof(ProcessJob_PendingRenderingChat_ChatFileNotOnDisk_RollsBackToPendingDownloadChat));
+        string tempVod = Path.GetTempFileName();
+        try
+        {
+            var job = new Pipeline { VodId = "v1", Stage = "PendingRenderingChat", VodFilePath = tempVod, ChatTextFilePath = "/nonexistent/chat.json" };
+            ctx.Pipelines.Add(job);
+            await ctx.SaveChangesAsync();
+
+            await JobManager.ProcessJobToCompletionAsync(job, ctx, CreateWorkerProvider(), NullLogger.Instance, CancellationToken.None);
+
+            await Assert.That(job.Stage).IsEqualTo("PendingDownloadChat");
+            await Assert.That(job.ChatTextFilePath).IsEqualTo("");
+        }
+        finally
+        {
+            File.Delete(tempVod);
+        }
+    }
+
+    [Test]
+    public async Task ProcessJob_PendingCombining_VodFileNotOnDisk_RollsBackToPending()
+    {
+        await using var ctx = CreateInMemoryContext(nameof(ProcessJob_PendingCombining_VodFileNotOnDisk_RollsBackToPending));
+        var job = new Pipeline { VodId = "v1", Stage = "PendingCombining", VodFilePath = "/nonexistent/vod.mp4", ChatVideoFilePath = "/chat.mp4" };
+        ctx.Pipelines.Add(job);
+        await ctx.SaveChangesAsync();
+
+        await JobManager.ProcessJobToCompletionAsync(job, ctx, CreateWorkerProvider(), NullLogger.Instance, CancellationToken.None);
+
+        await Assert.That(job.Stage).IsEqualTo("Pending");
+        await Assert.That(job.VodFilePath).IsEqualTo("");
+    }
+
+    [Test]
+    public async Task ProcessJob_PendingCombining_ChatVideoNotOnDisk_RollsBackToPendingRenderingChat()
+    {
+        await using var ctx = CreateInMemoryContext(nameof(ProcessJob_PendingCombining_ChatVideoNotOnDisk_RollsBackToPendingRenderingChat));
+        string tempVod = Path.GetTempFileName();
+        try
+        {
+            var job = new Pipeline { VodId = "v1", Stage = "PendingCombining", VodFilePath = tempVod, ChatVideoFilePath = "/nonexistent/chat.mp4" };
+            ctx.Pipelines.Add(job);
+            await ctx.SaveChangesAsync();
+
+            await JobManager.ProcessJobToCompletionAsync(job, ctx, CreateWorkerProvider(), NullLogger.Instance, CancellationToken.None);
+
+            await Assert.That(job.Stage).IsEqualTo("PendingRenderingChat");
+            await Assert.That(job.ChatVideoFilePath).IsEqualTo("");
+        }
+        finally
+        {
+            File.Delete(tempVod);
+        }
+    }
+
+    [Test]
+    public async Task ProcessJob_PendingUpload_FinalVideoNotOnDisk_RollsBackToPendingCombining()
+    {
+        await using var ctx = CreateInMemoryContext(nameof(ProcessJob_PendingUpload_FinalVideoNotOnDisk_RollsBackToPendingCombining));
+        var job = new Pipeline { VodId = "v1", Stage = "PendingUpload", FinalVideoFilePath = "/nonexistent/final.mp4" };
+        ctx.Pipelines.Add(job);
+        await ctx.SaveChangesAsync();
+
+        await JobManager.ProcessJobToCompletionAsync(job, ctx, CreateWorkerProvider(), NullLogger.Instance, CancellationToken.None);
+
+        await Assert.That(job.Stage).IsEqualTo("PendingCombining");
+        await Assert.That(job.FinalVideoFilePath).IsEqualTo("");
+    }
+
+    // =========================================================================
+    // ProcessJobToCompletionAsync — output-already-exists skip tests
+    // =========================================================================
+
+    [Test]
+    public async Task ProcessJob_DownloadingVod_OutputExists_SkipsToNextStage()
+    {
+        await using var ctx = CreateInMemoryContext(nameof(ProcessJob_DownloadingVod_OutputExists_SkipsToNextStage));
+        var job = new Pipeline { VodId = "v1", Stage = "Pending" };
+        ctx.Pipelines.Add(job);
+        await ctx.SaveChangesAsync();
+
+        var vodDownloader = new VodDownloader(null!);
+        string vodOutputPath = vodDownloader.GetOutputPath("v1");
+        Directory.CreateDirectory(Path.GetDirectoryName(vodOutputPath)!);
+        File.WriteAllText(vodOutputPath, "fake vod");
+        try
+        {
+            await JobManager.ProcessJobToCompletionAsync(job, ctx, CreateWorkerProvider(), NullLogger.Instance, CancellationToken.None);
+
+            // Should have skipped past download and set the path
+            await Assert.That(job.VodFilePath).IsEqualTo(vodOutputPath);
+            // Stage should have advanced past DownloadingVod (exact stage depends on what happens next,
+            // but it should NOT be Pending or DownloadingVod)
+            await Assert.That(job.Stage).IsNotEqualTo("Pending");
+            await Assert.That(job.Stage).IsNotEqualTo("DownloadingVod");
+        }
+        finally
+        {
+            File.Delete(vodOutputPath);
+        }
+    }
+
+    [Test]
+    public async Task ProcessJob_DownloadingChat_OutputExists_SkipsToNextStage()
+    {
+        await using var ctx = CreateInMemoryContext(nameof(ProcessJob_DownloadingChat_OutputExists_SkipsToNextStage));
+        var job = new Pipeline { VodId = "v2", Stage = "PendingDownloadChat" };
+        ctx.Pipelines.Add(job);
+        await ctx.SaveChangesAsync();
+
+        var chatDownloader = new ChatDownloader(null!);
+        string chatOutputPath = chatDownloader.GetOutputPath("v2");
+        Directory.CreateDirectory(Path.GetDirectoryName(chatOutputPath)!);
+        File.WriteAllText(chatOutputPath, "fake chat");
+        try
+        {
+            await JobManager.ProcessJobToCompletionAsync(job, ctx, CreateWorkerProvider(), NullLogger.Instance, CancellationToken.None);
+
+            await Assert.That(job.ChatTextFilePath).IsEqualTo(chatOutputPath);
+            await Assert.That(job.Stage).IsNotEqualTo("PendingDownloadChat");
+            await Assert.That(job.Stage).IsNotEqualTo("DownloadingChat");
+        }
+        finally
+        {
+            File.Delete(chatOutputPath);
+        }
     }
 
     // =========================================================================
