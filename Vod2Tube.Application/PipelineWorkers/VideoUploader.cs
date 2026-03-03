@@ -39,7 +39,7 @@ namespace Vod2Tube.Application
             _dbContext = dbContext;
         }
 
-        public async IAsyncEnumerable<string> RunAsync(string vodId, string finalFilePath,
+        public virtual async IAsyncEnumerable<string> RunAsync(string vodId, string finalFilePath,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
         {
             yield return "Initializing YouTube upload...";
