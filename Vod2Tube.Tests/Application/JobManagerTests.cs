@@ -238,7 +238,9 @@ public class JobManagerTests
     public async Task ProcessJob_PendingRenderingChat_VodFileNotOnDisk_RollsBackToPending()
     {
         await using var ctx = CreateInMemoryContext(nameof(ProcessJob_PendingRenderingChat_VodFileNotOnDisk_RollsBackToPending));
-        var job = new Pipeline { VodId = "v1", Stage = "PendingRenderingChat", VodFilePath = "/nonexistent/vod.mp4", ChatTextFilePath = "/chat.json" };
+        string missingVod = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mp4");
+        string missingChat = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.json");
+        var job = new Pipeline { VodId = "v1", Stage = "PendingRenderingChat", VodFilePath = missingVod, ChatTextFilePath = missingChat };
         ctx.Pipelines.Add(job);
         await ctx.SaveChangesAsync();
 
@@ -255,7 +257,8 @@ public class JobManagerTests
         string tempVod = Path.GetTempFileName();
         try
         {
-            var job = new Pipeline { VodId = "v1", Stage = "PendingRenderingChat", VodFilePath = tempVod, ChatTextFilePath = "/nonexistent/chat.json" };
+            string missingChat = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.json");
+            var job = new Pipeline { VodId = "v1", Stage = "PendingRenderingChat", VodFilePath = tempVod, ChatTextFilePath = missingChat };
             ctx.Pipelines.Add(job);
             await ctx.SaveChangesAsync();
 
@@ -274,7 +277,9 @@ public class JobManagerTests
     public async Task ProcessJob_PendingCombining_VodFileNotOnDisk_RollsBackToPending()
     {
         await using var ctx = CreateInMemoryContext(nameof(ProcessJob_PendingCombining_VodFileNotOnDisk_RollsBackToPending));
-        var job = new Pipeline { VodId = "v1", Stage = "PendingCombining", VodFilePath = "/nonexistent/vod.mp4", ChatVideoFilePath = "/chat.mp4" };
+        string missingVod = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mp4");
+        string missingChatVideo = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mp4");
+        var job = new Pipeline { VodId = "v1", Stage = "PendingCombining", VodFilePath = missingVod, ChatVideoFilePath = missingChatVideo };
         ctx.Pipelines.Add(job);
         await ctx.SaveChangesAsync();
 
@@ -291,7 +296,8 @@ public class JobManagerTests
         string tempVod = Path.GetTempFileName();
         try
         {
-            var job = new Pipeline { VodId = "v1", Stage = "PendingCombining", VodFilePath = tempVod, ChatVideoFilePath = "/nonexistent/chat.mp4" };
+            string missingChatVideo = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.mp4");
+            var job = new Pipeline { VodId = "v1", Stage = "PendingCombining", VodFilePath = tempVod, ChatVideoFilePath = missingChatVideo };
             ctx.Pipelines.Add(job);
             await ctx.SaveChangesAsync();
 
@@ -310,7 +316,8 @@ public class JobManagerTests
     public async Task ProcessJob_PendingUpload_FinalVideoNotOnDisk_RollsBackToPendingCombining()
     {
         await using var ctx = CreateInMemoryContext(nameof(ProcessJob_PendingUpload_FinalVideoNotOnDisk_RollsBackToPendingCombining));
-        var job = new Pipeline { VodId = "v1", Stage = "PendingUpload", FinalVideoFilePath = "/nonexistent/final.mp4" };
+        string missingFinal = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}_final.mp4");
+        var job = new Pipeline { VodId = "v1", Stage = "PendingUpload", FinalVideoFilePath = missingFinal };
         ctx.Pipelines.Add(job);
         await ctx.SaveChangesAsync();
 
