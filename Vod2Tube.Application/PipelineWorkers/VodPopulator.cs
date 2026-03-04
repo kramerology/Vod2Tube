@@ -43,11 +43,12 @@ namespace Vod2Tube.Application
 
                     if (channelNames.Count == 0)
                     {
-                        _logger.LogWarning("No active channels found in database. Waiting 5 minutes before checking again.");
+                        _logger.LogWarning("No active channels found in database — waiting 5 minutes before checking again");
                         continue;
                     }
 
-                    _logger.LogInformation("Processing {Count} active channel(s)", channelNames.Count);
+                    _logger.LogInformation("VodPopulator scanning {Count} active channel(s): {Channels}",
+                        channelNames.Count, string.Join(", ", channelNames));
 
                     foreach (string channel in channelNames)
                     {
@@ -63,8 +64,20 @@ namespace Vod2Tube.Application
                                                       .OrderBy(v => v.PublishedAt)
                                                       .ToList();
 
+                        if (newVods.Count == 0)
+                        {
+                            _logger.LogInformation("Channel '{Channel}' — no new VODs found ({Total} total on record)", channel, existingVodIds.Count);
+                        }
+                        else
+                        {
+                            _logger.LogInformation("Channel '{Channel}' — {NewCount} new VOD(s) discovered (had {ExistingCount})", channel, newVods.Count, existingVodIds.Count);
+                        }
+
                         foreach (TwitchVod vod in newVods)
                         {
+                            _logger.LogInformation("  Queuing VOD '{Title}' ({VodId}) from '{Channel}', streamed {Date:yyyy-MM-dd}",
+                                vod.Title, vod.Id, channel, vod.PublishedAt);
+
                             dbContext.TwitchVods.Add(new Domain.TwitchVod
                             {
                                 Id = vod.Id,

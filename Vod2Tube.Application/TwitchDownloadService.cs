@@ -76,7 +76,7 @@ namespace Vod2Tube.Application
 
 
 
-        public async IAsyncEnumerable<string> RenderChatVideoAsync(FileInfo chatFile, FileInfo vodFile, DirectoryInfo tempDir, FileInfo finalFile, CancellationToken cancellationToken = default)
+        public async IAsyncEnumerable<string> RenderChatVideoAsync(FileInfo chatFile, FileInfo vodFile, DirectoryInfo tempDir, FileInfo finalFile, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             if (!File.Exists(chatFile.FullName))
                 throw new FileNotFoundException($"Chat file not found: {chatFile.FullName}");
@@ -108,18 +108,41 @@ namespace Vod2Tube.Application
 
             using var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
 
-            var regex = new Regex(@"^\[STATUS\] - (.*?)$");
+            // TwitchDownloaderCLI emits lines like:
+            //   [STATUS] - Rendering chat [1234/5000]
+            // Capture both the full message and any X/Y progress fraction.
+            var statusRegex   = new Regex(@"^\[STATUS\] - (.*?)$");
+            var progressRegex = new Regex(@"\[(\d+)/(\d+)\]");
             var statusQueue = new System.Collections.Concurrent.ConcurrentQueue<string>();
             var errorOutput = new StringBuilder();
-            var outputReceived = new TaskCompletionSource<bool>();
+
+            var startTime = DateTime.UtcNow;
 
             process.OutputDataReceived += (sender, e) =>
             {
                 if (string.IsNullOrEmpty(e.Data)) return;
-                var match = regex.Match(e.Data);
-                if (match.Success)
+                var match = statusRegex.Match(e.Data);
+                if (!match.Success) return;
+
+                string rawStatus = match.Groups[1].Value;
+
+                // Enrich with % complete and ETA if a X/Y counter is present.
+                var progressMatch = progressRegex.Match(rawStatus);
+                if (progressMatch.Success
+                    && long.TryParse(progressMatch.Groups[1].Value, out long done)
+                    && long.TryParse(progressMatch.Groups[2].Value, out long total)
+                    && total > 0)
                 {
-                    statusQueue.Enqueue(match.Groups[1].Value);
+                    double pct     = (double)done / total * 100.0;
+                    double elapsed = (DateTime.UtcNow - startTime).TotalSeconds;
+                    string etaStr  = (done > 0 && elapsed > 0)
+                        ? FormatEta(TimeSpan.FromSeconds(elapsed / done * (total - done)))
+                        : "–";
+                    statusQueue.Enqueue($"{rawStatus} | {pct:F1}% | ETA {etaStr}");
+                }
+                else
+                {
+                    statusQueue.Enqueue(rawStatus);
                 }
             };
 
@@ -248,9 +271,40 @@ namespace Vod2Tube.Application
         private static readonly Regex _ffmpegProgressRegex = new(@"frame=\s*(\d+).*time=(\S+)", RegexOptions.Compiled);
 
         /// <summary>
-        /// Selects the best available H.264 encoder from the supplied ffmpeg encoder list output.
-        /// Priority: h264_amf (AMD) → h264_nvenc (NVIDIA) → h264_qsv (Intel) → libx264 (software).
+        /// Returns a human-readable ETA string (e.g. "3m 12s", "45s").
         /// </summary>
+        internal static string FormatEta(TimeSpan eta)
+        {
+            if (eta <= TimeSpan.Zero) return "0s";
+            if (eta.TotalHours >= 1)
+                return $"{(int)eta.TotalHours}h {eta.Minutes:D2}m";
+            if (eta.TotalMinutes >= 1)
+                return $"{(int)eta.TotalMinutes}m {eta.Seconds:D2}s";
+            return $"{eta.Seconds}s";
+        }
+
+        /// <summary>
+        /// Uses ffprobe to retrieve the duration of a video file.
+        /// Returns <see cref="TimeSpan.Zero"/> on failure.
+        /// </summary>
+        private TimeSpan GetVideoDuration(string filePath)
+        {
+            try
+            {
+                string output = RunProcessWithOutput(_ffprobePath,
+                    $"-v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 \"{filePath}\"").Trim();
+                if (double.TryParse(output, System.Globalization.NumberStyles.Float,
+                        CultureInfo.InvariantCulture, out double secs))
+                    return TimeSpan.FromSeconds(secs);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Unable to determine duration for {FilePath}", filePath);
+            }
+            return TimeSpan.Zero;
+        }
+
+
         internal static string SelectVideoEncoder(string availableEncoders)
         {
             var found = new HashSet<string>(
@@ -320,6 +374,9 @@ namespace Vod2Tube.Application
 
             string arguments = $"-i \"{vodFile.FullName}\" -i \"{chatVideoFile.FullName}\" -filter_complex \"[0:v][1:v]hstack=inputs=2,format={pixelFormat}\" {encoderArgs} -c:a copy \"{outputFile.FullName}\"";
 
+            // Obtain the total duration of the VOD so we can report % complete.
+            TimeSpan totalDuration = GetVideoDuration(vodFile.FullName);
+
             var psi = new ProcessStartInfo
             {
                 FileName = _ffmpegPath,
@@ -338,16 +395,36 @@ namespace Vod2Tube.Application
             //   frame=  100 fps= 60 q=28.0 size=  2048kB time=00:00:01.67 ...
             var statusQueue = new System.Collections.Concurrent.ConcurrentQueue<string>();
             var errorOutput = new StringBuilder();
+            var startTime   = DateTime.UtcNow;
 
             process.ErrorDataReceived += (sender, e) =>
             {
                 if (string.IsNullOrEmpty(e.Data)) return;
                 errorOutput.AppendLine(e.Data);
                 var match = _ffmpegProgressRegex.Match(e.Data);
-                if (match.Success)
+                if (!match.Success) return;
+
+                long   frame      = long.TryParse(match.Groups[1].Value, out var f) ? f : 0;
+                string timeStr    = match.Groups[2].Value;
+
+                // Build a friendly status line including % and ETA when possible.
+                string status;
+                if (totalDuration > TimeSpan.Zero
+                    && TimeSpan.TryParse(timeStr, CultureInfo.InvariantCulture, out var currentTime))
                 {
-                    statusQueue.Enqueue($"Encoding frame {match.Groups[1].Value}, time {match.Groups[2].Value}");
+                    double pct     = Math.Min(currentTime.TotalSeconds / totalDuration.TotalSeconds * 100.0, 100.0);
+                    double elapsed = (DateTime.UtcNow - startTime).TotalSeconds;
+                    string etaStr  = (pct > 0 && elapsed > 0)
+                        ? FormatEta(TimeSpan.FromSeconds(elapsed / pct * (100.0 - pct)))
+                        : "–";
+                    status = $"Combining — frame {frame}, time {timeStr} | {pct:F1}% | ETA {etaStr}";
                 }
+                else
+                {
+                    status = $"Combining — frame {frame}, time {timeStr}";
+                }
+
+                statusQueue.Enqueue(status);
             };
 
             process.Start();
