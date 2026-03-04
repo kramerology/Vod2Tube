@@ -291,11 +291,43 @@ namespace Vod2Tube.Application
         {
             try
             {
-                string output = RunProcessWithOutput(_ffprobePath,
-                    $"-v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 \"{filePath}\"").Trim();
-                if (double.TryParse(output, System.Globalization.NumberStyles.Float,
-                        CultureInfo.InvariantCulture, out double secs))
-                    return TimeSpan.FromSeconds(secs);
+                var arguments =
+                    $"-v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 \"{filePath}\"";
+
+                var startInfo = new ProcessStartInfo
+                {
+                    FileName = _ffprobePath,
+                    Arguments = arguments,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+
+                using (var process = new Process { StartInfo = startInfo })
+                {
+                    if (!process.Start())
+                    {
+                        _logger.LogWarning("Unable to start ffprobe to determine duration for {FilePath}", filePath);
+                        return TimeSpan.Zero;
+                    }
+
+                    string output = process.StandardOutput.ReadToEnd();
+                    string errorOutput = process.StandardError.ReadToEnd();
+                    process.WaitForExit();
+
+                    if (process.ExitCode != 0)
+                    {
+                        _logger.LogWarning(
+                            "ffprobe exited with code {ExitCode} while determining duration for {FilePath}. Error: {Error}",
+                            process.ExitCode, filePath, errorOutput);
+                        return TimeSpan.Zero;
+                    }
+
+                    output = output.Trim();
+                    if (double.TryParse(output, NumberStyles.Float, CultureInfo.InvariantCulture, out double secs))
+                        return TimeSpan.FromSeconds(secs);
+                }
             }
             catch (Exception ex)
             {
