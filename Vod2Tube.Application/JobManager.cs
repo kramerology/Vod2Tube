@@ -131,10 +131,19 @@ namespace Vod2Tube.Application
                             {
                                 lastUpdate = DateTime.UtcNow;
                                 job.Description = status;
-                                try { await dbContext.SaveChangesAsync(ct); }
-                                catch (Exception ex) { logger.LogWarning(ex, "Failed to save progress for job {VodId}", job.VodId); }
+                                using (logger.BeginScope(new Dictionary<string, object?> { ["IsProgress"] = true }))
+                                    logger.LogInformation("{Status}", status);
+                                try
+                                {
+                                    await dbContext.SaveChangesAsync(ct);
+                                }
+                                catch (Exception ex)
+                                {
+                                    logger.LogWarning(ex, "Failed to save progress for job {VodId}", job.VodId);
+                                }
                             }
                         }
+                        Console.WriteLine(); // end the in-place progress line
                         string vodOutput = vodDownloader.GetOutputPath(job.VodId);
                         if (!File.Exists(vodOutput))
                             throw new InvalidOperationException($"VOD download completed but output file not found: {vodOutput}");
@@ -166,10 +175,13 @@ namespace Vod2Tube.Application
                             {
                                 lastUpdate = DateTime.UtcNow;
                                 job.Description = status;
+                                using (logger.BeginScope(new Dictionary<string, object?> { ["IsProgress"] = true }))
+                                    logger.LogInformation("{Status}", status);
                                 try { await dbContext.SaveChangesAsync(ct); }
                                 catch (Exception ex) { logger.LogWarning(ex, "Failed to save progress for job {VodId}", job.VodId); }
                             }
                         }
+                        Console.WriteLine(); // end the in-place progress line
                         job.ChatTextFilePath = chatDownloader.GetOutputPath(job.VodId);
                         if (!File.Exists(job.ChatTextFilePath))
                             throw new InvalidOperationException($"Chat download completed but output file not found: {job.ChatTextFilePath}");
@@ -215,10 +227,13 @@ namespace Vod2Tube.Application
                             {
                                 lastUpdate = DateTime.UtcNow;
                                 job.Description = status;
+                                using (logger.BeginScope(new Dictionary<string, object?> { ["IsProgress"] = true }))
+                                    logger.LogInformation("{Status}", status);
                                 try { await dbContext.SaveChangesAsync(ct); }
                                 catch (Exception ex) { logger.LogWarning(ex, "Failed to save progress for job {VodId}", job.VodId); }
                             }
                         }
+                        Console.WriteLine(); // end the in-place progress line
                         job.ChatVideoFilePath = chatRenderer.GetOutputPath(job.VodId);
                         if (!File.Exists(job.ChatVideoFilePath))
                             throw new InvalidOperationException($"Chat render completed but output file not found: {job.ChatVideoFilePath}");
@@ -264,10 +279,13 @@ namespace Vod2Tube.Application
                             {
                                 lastUpdate = DateTime.UtcNow;
                                 job.Description = status;
+                                using (logger.BeginScope(new Dictionary<string, object?> { ["IsProgress"] = true }))
+                                    logger.LogInformation("{Status}", status);
                                 try { await dbContext.SaveChangesAsync(ct); }
                                 catch (Exception ex) { logger.LogWarning(ex, "Failed to save progress for job {VodId}", job.VodId); }
                             }
                         }
+                        Console.WriteLine(); // end the in-place progress line
                         job.FinalVideoFilePath = finalRenderer.GetOutputPath(job.VodId);
                         if (!File.Exists(job.FinalVideoFilePath))
                             throw new InvalidOperationException($"Video combine completed but output file not found: {job.FinalVideoFilePath}");
@@ -295,10 +313,13 @@ namespace Vod2Tube.Application
                         {
                             lastUpdate = DateTime.UtcNow;
                             job.Description = status;
+                            using (logger.BeginScope(new Dictionary<string, object?> { ["IsProgress"] = true }))
+                                logger.LogInformation("{Status}", status);
                             try { await dbContext.SaveChangesAsync(ct); }
                             catch (Exception ex) { logger.LogWarning(ex, "Failed to save progress for job {VodId}", job.VodId); }
                         }
                     }
+                    Console.WriteLine(); // end the in-place progress line
                     await SetStageAsync(dbContext, job, "Uploaded", ct);
                 }
 
