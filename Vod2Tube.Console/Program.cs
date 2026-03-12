@@ -16,7 +16,7 @@ Log.Logger = new LoggerConfiguration()
     // Normal events: console + file
     .WriteTo.Logger(lc => lc
         .Filter.ByExcluding(e => e.Properties.ContainsKey("IsProgress"))
-        .WriteTo.Console(outputTemplate: "\n{Timestamp:HH:mm:ss} [{Level:u3}] {Message:lj}{NewLine}{Exception}")
+        .WriteTo.Console(outputTemplate: "{Timestamp:HH:mm:ss} [{Level:u3}] {Message:lj}{NewLine}{Exception}")
         .WriteTo.File("logs/vod2tube.log", rollingInterval: RollingInterval.Day,
             outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss} [{Level:u3}] {Message:lj}{NewLine}{Exception}"))
     // Progress events: console only, in-place (ANSI erase line + carriage return, no newline)
