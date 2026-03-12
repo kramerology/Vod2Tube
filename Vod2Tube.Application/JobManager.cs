@@ -130,15 +130,21 @@ namespace Vod2Tube.Application
                             if (DateTime.UtcNow - lastUpdate >= TimeSpan.FromSeconds(2))
                             {
                                 lastUpdate = DateTime.UtcNow;
-                                        job.Description = status;
-                                        using (logger.BeginScope(new Dictionary<string, object?> { ["IsProgress"] = true }))
-                                            logger.LogInformation("{Status}", status);
-                                        try { await dbContext.SaveChangesAsync(ct); }
-                                catch (Exception ex) { logger.LogWarning(ex, "Failed to save progress for job {VodId}", job.VodId); }
+                                job.Description = status;
+                                using (logger.BeginScope(new Dictionary<string, object?> { ["IsProgress"] = true }))
+                                    logger.LogInformation("{Status}", status);
+                                try
+                                {
+                                    await dbContext.SaveChangesAsync(ct);
+                                }
+                                catch (Exception ex)
+                                {
+                                    logger.LogWarning(ex, "Failed to save progress for job {VodId}", job.VodId);
+                                }
                             }
-                            }
-                            Console.WriteLine(); // end the in-place progress line
-                            string vodOutput = vodDownloader.GetOutputPath(job.VodId);
+                        }
+                        Console.WriteLine(); // end the in-place progress line
+                        string vodOutput = vodDownloader.GetOutputPath(job.VodId);
                         if (!File.Exists(vodOutput))
                             throw new InvalidOperationException($"VOD download completed but output file not found: {vodOutput}");
                         job.VodFilePath = vodOutput;
