@@ -219,4 +219,84 @@ public class TwitchDownloadServiceTests
 
         await Assert.That(encoder).IsEqualTo("libx264");
     }
+
+    // =========================================================================
+    // IsValidVodId – accepted formats
+    // =========================================================================
+
+    /// <summary>
+    /// A plain numeric VOD ID (the most common Twitch format) should be accepted.
+    /// </summary>
+    [Test]
+    public async Task IsValidVodId_NumericId_ReturnsTrue()
+    {
+        await Assert.That(TwitchDownloadService.IsValidVodId("2345678901")).IsTrue();
+    }
+
+    /// <summary>
+    /// An alphanumeric ID with underscores and hyphens is valid.
+    /// </summary>
+    [Test]
+    public async Task IsValidVodId_AlphanumericWithUnderscoreAndHyphen_ReturnsTrue()
+    {
+        await Assert.That(TwitchDownloadService.IsValidVodId("abc_123-XYZ")).IsTrue();
+    }
+
+    // =========================================================================
+    // IsValidVodId – rejected formats
+    // =========================================================================
+
+    /// <summary>
+    /// A null VOD ID must be rejected.
+    /// </summary>
+    [Test]
+    public async Task IsValidVodId_Null_ReturnsFalse()
+    {
+        await Assert.That(TwitchDownloadService.IsValidVodId(null)).IsFalse();
+    }
+
+    /// <summary>
+    /// An empty string must be rejected.
+    /// </summary>
+    [Test]
+    public async Task IsValidVodId_Empty_ReturnsFalse()
+    {
+        await Assert.That(TwitchDownloadService.IsValidVodId(string.Empty)).IsFalse();
+    }
+
+    /// <summary>
+    /// A whitespace-only string must be rejected.
+    /// </summary>
+    [Test]
+    public async Task IsValidVodId_Whitespace_ReturnsFalse()
+    {
+        await Assert.That(TwitchDownloadService.IsValidVodId("   ")).IsFalse();
+    }
+
+    /// <summary>
+    /// A VOD ID containing a space must be rejected because spaces would break the URL.
+    /// </summary>
+    [Test]
+    public async Task IsValidVodId_ContainsSpace_ReturnsFalse()
+    {
+        await Assert.That(TwitchDownloadService.IsValidVodId("123 456")).IsFalse();
+    }
+
+    /// <summary>
+    /// A VOD ID containing a URL-special character (slash) must be rejected.
+    /// </summary>
+    [Test]
+    public async Task IsValidVodId_ContainsSlash_ReturnsFalse()
+    {
+        await Assert.That(TwitchDownloadService.IsValidVodId("123/456")).IsFalse();
+    }
+
+    /// <summary>
+    /// A VOD ID containing shell-special characters must be rejected.
+    /// </summary>
+    [Test]
+    public async Task IsValidVodId_ContainsSpecialChars_ReturnsFalse()
+    {
+        await Assert.That(TwitchDownloadService.IsValidVodId("123;rm -rf /")).IsFalse();
+    }
 }

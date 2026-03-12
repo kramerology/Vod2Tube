@@ -73,8 +73,13 @@ namespace Vod2Tube.Application
             throw new FormatException($"Unable to parse FPS: {fpsStr}");
         }
 
-
-
+        /// <summary>
+        /// Returns <see langword="true"/> when <paramref name="vodId"/> is a non-empty
+        /// string consisting only of alphanumeric characters, underscores, and hyphens —
+        /// the set of characters valid in a Twitch VOD ID.
+        /// </summary>
+        internal static bool IsValidVodId(string? vodId) =>
+            !string.IsNullOrWhiteSpace(vodId) && Regex.IsMatch(vodId, @"^[a-zA-Z0-9_-]+$");
 
 
         public async IAsyncEnumerable<string> RenderChatVideoAsync(FileInfo chatFile, FileInfo vodFile, DirectoryInfo tempDir, FileInfo finalFile, CancellationToken cancellationToken = default)
@@ -167,7 +172,7 @@ namespace Vod2Tube.Application
         public async IAsyncEnumerable<string> DownloadVodNewAsync(string vodId, DirectoryInfo tempDir, FileInfo finalFile, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             // Validate vodId before use in a URL to prevent malformed requests.
-            if (string.IsNullOrWhiteSpace(vodId) || !Regex.IsMatch(vodId, @"^[a-zA-Z0-9_-]+$"))
+            if (!IsValidVodId(vodId))
                 throw new ArgumentException($"Invalid VOD ID format: '{vodId}'", nameof(vodId));
 
             // yt-dlp is used for resumable Twitch VOD downloads.
