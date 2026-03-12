@@ -180,10 +180,18 @@ namespace Vod2Tube.Application
             //   --newline                 emit each progress update on its own line (parseable)
             //   --progress                always show progress even when not connected to a TTY
             //   --merge-output-format mp4 ensure the final container is mp4
+
+            if (tempDir == null)
+                throw new ArgumentNullException(nameof(tempDir));
+
+            if (!tempDir.Exists)
+                tempDir.Create();
+
             string url = $"https://www.twitch.tv/videos/{vodId}";
             string arguments = $"--continue --part --retries 10 --fragment-retries infinite " +
                                $"--concurrent-fragments 4 --newline --progress " +
                                $"--merge-output-format mp4 " +
+                               $"--paths temp:\"{tempDir.FullName}\" " +
                                $"-o \"{finalFile.FullName}\" \"{url}\"";
 
             var psi = new ProcessStartInfo
