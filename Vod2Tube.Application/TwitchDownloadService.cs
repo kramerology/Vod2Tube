@@ -241,7 +241,17 @@ namespace Vod2Tube.Application
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
 
-            var waitTask = process.WaitForExitAsync(cancellationToken);
+            // Kill the yt-dlp process tree when the caller cancels, so no orphaned
+            // download processes or .part file locks survive beyond this enumerator.
+            using var killOnCancel = cancellationToken.Register(() =>
+            {
+                try { process.Kill(entireProcessTree: true); }
+                catch (InvalidOperationException) { } // process already exited or disposed
+            });
+
+            // Use CancellationToken.None so WaitForExitAsync waits for the process to
+            // fully exit after Kill() rather than returning immediately on cancellation.
+            var waitTask = process.WaitForExitAsync(CancellationToken.None);
 
             while (!waitTask.IsCompleted)
             {
