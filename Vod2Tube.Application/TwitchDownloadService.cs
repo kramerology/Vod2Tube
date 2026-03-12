@@ -73,8 +73,13 @@ namespace Vod2Tube.Application
             throw new FormatException($"Unable to parse FPS: {fpsStr}");
         }
 
-
-
+        /// <summary>
+        /// Returns <see langword="true"/> when <paramref name="vodId"/> is a non-empty
+        /// string consisting only of alphanumeric characters, underscores, and hyphens —
+        /// the set of characters valid in a Twitch VOD ID.
+        /// </summary>
+        internal static bool IsValidVodId(string? vodId) =>
+            !string.IsNullOrWhiteSpace(vodId) && Regex.IsMatch(vodId, @"^[a-zA-Z0-9_-]+$");
 
 
         public async IAsyncEnumerable<string> RenderChatVideoAsync(FileInfo chatFile, FileInfo vodFile, DirectoryInfo tempDir, FileInfo finalFile, CancellationToken cancellationToken = default)
@@ -167,7 +172,7 @@ namespace Vod2Tube.Application
         public async IAsyncEnumerable<string> DownloadVodNewAsync(string vodId, DirectoryInfo tempDir, FileInfo finalFile, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             // Validate vodId before use in a URL to prevent malformed requests.
-            if (string.IsNullOrWhiteSpace(vodId) || !Regex.IsMatch(vodId, @"^[a-zA-Z0-9_-]+$"))
+            if (!IsValidVodId(vodId))
                 throw new ArgumentException($"Invalid VOD ID format: '{vodId}'", nameof(vodId));
 
             // yt-dlp is used for resumable Twitch VOD downloads.
@@ -180,10 +185,18 @@ namespace Vod2Tube.Application
             //   --newline                 emit each progress update on its own line (parseable)
             //   --progress                always show progress even when not connected to a TTY
             //   --merge-output-format mp4 ensure the final container is mp4
+
+            if (tempDir == null)
+                throw new ArgumentNullException(nameof(tempDir));
+
+            if (!tempDir.Exists)
+                tempDir.Create();
+
             string url = $"https://www.twitch.tv/videos/{vodId}";
             string arguments = $"--continue --part --retries 10 --fragment-retries infinite " +
                                $"--concurrent-fragments 4 --newline --progress " +
                                $"--merge-output-format mp4 " +
+                               $"--paths temp:\"{tempDir.FullName}\" " +
                                $"-o \"{finalFile.FullName}\" \"{url}\"";
 
             var psi = new ProcessStartInfo
@@ -228,7 +241,17 @@ namespace Vod2Tube.Application
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
 
-            var waitTask = process.WaitForExitAsync(cancellationToken);
+            // Kill the yt-dlp process tree when the caller cancels, so no orphaned
+            // download processes or .part file locks survive beyond this enumerator.
+            using var killOnCancel = cancellationToken.Register(() =>
+            {
+                try { process.Kill(entireProcessTree: true); }
+                catch (InvalidOperationException) { } // process already exited or disposed
+            });
+
+            // Use CancellationToken.None so WaitForExitAsync waits for the process to
+            // fully exit after Kill() rather than returning immediately on cancellation.
+            var waitTask = process.WaitForExitAsync(CancellationToken.None);
 
             while (!waitTask.IsCompleted)
             {
