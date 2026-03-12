@@ -17,7 +17,7 @@ namespace Vod2Tube.Application
         private const string DefaultCliFileName = "E:\\Projects\\Vod2Tube\\Vod2Tube.Console\\bin\\Debug\\net10.0\\TwitchDownloaderCLI.exe";
         private const string _ffmpegPath        = "E:\\Programs\\ffmpeg\\ffmpeg.exe";
         private const string _ffprobePath       = "E:\\Programs\\ffmpeg\\ffprobe.exe";
-        private const string _ytDlpPath         = "yt-dlp";
+        private const string _ytDlpPath         = "E:\\Projects\\Vod2Tube\\Vod2Tube.Console\\bin\\Debug\\net10.0\\yt-dlp";
 
         private readonly ILogger<TwitchDownloadService> _logger;
         private readonly Lazy<string> _cachedEncoder;
