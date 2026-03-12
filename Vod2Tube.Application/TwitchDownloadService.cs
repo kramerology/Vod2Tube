@@ -17,6 +17,7 @@ namespace Vod2Tube.Application
         private const string DefaultCliFileName = "E:\\Projects\\Vod2Tube\\Vod2Tube.Console\\bin\\Debug\\net10.0\\TwitchDownloaderCLI.exe";
         private const string _ffmpegPath        = "E:\\Programs\\ffmpeg\\ffmpeg.exe";
         private const string _ffprobePath       = "E:\\Programs\\ffmpeg\\ffprobe.exe";
+        private const string _ytDlpPath         = "E:\\Projects\\Vod2Tube\\Vod2Tube.Console\\bin\\Debug\\net10.0\\yt-dlp";
 
         private readonly ILogger<TwitchDownloadService> _logger;
         private readonly Lazy<string> _cachedEncoder;
@@ -72,8 +73,13 @@ namespace Vod2Tube.Application
             throw new FormatException($"Unable to parse FPS: {fpsStr}");
         }
 
-
-
+        /// <summary>
+        /// Returns <see langword="true"/> when <paramref name="vodId"/> is a non-empty
+        /// string consisting only of alphanumeric characters, underscores, and hyphens —
+        /// the set of characters valid in a Twitch VOD ID.
+        /// </summary>
+        internal static bool IsValidVodId(string? vodId) =>
+            !string.IsNullOrWhiteSpace(vodId) && Regex.IsMatch(vodId, @"^[a-zA-Z0-9_-]+$");
 
 
         public async IAsyncEnumerable<string> RenderChatVideoAsync(FileInfo chatFile, FileInfo vodFile, DirectoryInfo tempDir, FileInfo finalFile, CancellationToken cancellationToken = default)
@@ -163,13 +169,39 @@ namespace Vod2Tube.Application
             }
         }
 
-        public async IAsyncEnumerable<string> DownloadVodNewAsync(string vodId, DirectoryInfo tempDir, FileInfo finalFile, CancellationToken cancellationToken = default)
+        public async IAsyncEnumerable<string> DownloadVodNewAsync(string vodId, DirectoryInfo tempDir, FileInfo finalFile, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
-            string arguments = $"videodownload -u \"{vodId}\" --temp-path \"{tempDir.FullName}\" -o \"{finalFile.FullName}\" --collision overwrite --ffmpeg-path \"{_ffmpegPath}\" ";
+            // Validate vodId before use in a URL to prevent malformed requests.
+            if (!IsValidVodId(vodId))
+                throw new ArgumentException($"Invalid VOD ID format: '{vodId}'", nameof(vodId));
+
+            // yt-dlp is used for resumable Twitch VOD downloads.
+            // Key flags:
+            //   -c / --continue           resume a partial download instead of restarting
+            //   --part                    write to a .part file while in progress (safe resume marker)
+            //   --retries N               retry on transient network errors
+            //   --fragment-retries N      retry failed HLS/DASH fragment fetches (Twitch uses HLS)
+            //   --concurrent-fragments N  download N fragments in parallel for speed
+            //   --newline                 emit each progress update on its own line (parseable)
+            //   --progress                always show progress even when not connected to a TTY
+            //   --merge-output-format mp4 ensure the final container is mp4
+
+            if (tempDir == null)
+                throw new ArgumentNullException(nameof(tempDir));
+
+            if (!tempDir.Exists)
+                tempDir.Create();
+
+            string url = $"https://www.twitch.tv/videos/{vodId}";
+            string arguments = $"--continue --part --retries 10 --fragment-retries infinite " +
+                               $"--concurrent-fragments 4 --newline --progress " +
+                               $"--merge-output-format mp4 " +
+                               $"--paths temp:\"{tempDir.FullName}\" " +
+                               $"-o \"{finalFile.FullName}\" \"{url}\"";
 
             var psi = new ProcessStartInfo
             {
-                FileName = DefaultCliFileName,
+                FileName = _ytDlpPath,
                 Arguments = arguments,
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
@@ -181,15 +213,16 @@ namespace Vod2Tube.Application
 
             using var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
 
-            var regex = new Regex(@"^\[STATUS\] - (.*?) \[\d+/\d+\]$");
+            // yt-dlp progress lines look like:
+            //   [download]  10.0% of 1.20GiB at 5.00MiB/s ETA 00:03:45 (frag 10/100)
+            var progressRegex = new Regex(@"^\[download\]\s+(.+)$", RegexOptions.Compiled);
             var statusQueue = new System.Collections.Concurrent.ConcurrentQueue<string>();
             var errorOutput = new StringBuilder();
-            var outputReceived = new TaskCompletionSource<bool>();
 
             process.OutputDataReceived += (sender, e) =>
             {
                 if (string.IsNullOrEmpty(e.Data)) return;
-                var match = regex.Match(e.Data);
+                var match = progressRegex.Match(e.Data);
                 if (match.Success)
                 {
                     statusQueue.Enqueue(match.Groups[1].Value);
@@ -208,7 +241,17 @@ namespace Vod2Tube.Application
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
 
-            var waitTask = process.WaitForExitAsync(cancellationToken);
+            // Kill the yt-dlp process tree when the caller cancels, so no orphaned
+            // download processes or .part file locks survive beyond this enumerator.
+            using var killOnCancel = cancellationToken.Register(() =>
+            {
+                try { process.Kill(entireProcessTree: true); }
+                catch (InvalidOperationException) { } // process already exited or disposed
+            });
+
+            // Use CancellationToken.None so WaitForExitAsync waits for the process to
+            // fully exit after Kill() rather than returning immediately on cancellation.
+            var waitTask = process.WaitForExitAsync(CancellationToken.None);
 
             while (!waitTask.IsCompleted)
             {
@@ -231,16 +274,18 @@ namespace Vod2Tube.Application
             {
                 string errorText = errorOutput.ToString();
 
-                // Check for specific known errors
-                if (errorText.Contains("Invalid VOD, deleted/expired VOD possibly?", StringComparison.OrdinalIgnoreCase))
+                // Check for specific known errors (VOD deleted or unavailable)
+                if (errorText.Contains("Video unavailable", StringComparison.OrdinalIgnoreCase) ||
+                    errorText.Contains("This video is not available", StringComparison.OrdinalIgnoreCase) ||
+                    errorText.Contains("Unable to download the video", StringComparison.OrdinalIgnoreCase))
                 {
                     _logger.LogWarning("VOD {VodId} is invalid, deleted, or expired. This will be counted as a failure.", vodId);
                     throw new InvalidOperationException($"VOD {vodId} is invalid, deleted, or expired.");
                 }
 
-                _logger.LogError("TwitchDownloaderCLI videodownload exited with code {ExitCode} for VOD {VodId}. Arguments: {Arguments}. Stderr: {Stderr}",
+                _logger.LogError("yt-dlp exited with code {ExitCode} for VOD {VodId}. Arguments: {Arguments}. Stderr: {Stderr}",
                     process.ExitCode, vodId, arguments, errorText);
-                throw new InvalidOperationException($"TwitchDownloaderCLI videodownload exited with code {process.ExitCode} for VOD {vodId}.");
+                throw new InvalidOperationException($"yt-dlp exited with code {process.ExitCode} for VOD {vodId}.");
             }
         }
 
