@@ -134,6 +134,7 @@ namespace Vod2Tube.Application
                     {
                         // Best-effort save — the upload proceeds, but a restart cannot be resumed
                         pipeline.ResumableUploadUri = string.Empty;
+                        _dbContext.Entry(pipeline).Property(p => p.ResumableUploadUri).IsModified = false;
                         saveWarning = "Warning: Failed to save upload session URI; upload cannot be resumed if interrupted.";
                     }
 
