@@ -51,6 +51,12 @@ try
         })
         .Build();
 
+    using (var scope = host.Services.CreateScope())
+    {
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        await db.Database.EnsureCreatedAsync();
+    }
+
     await host.RunAsync();
 
     Log.Information("Vod2Tube shut down cleanly");

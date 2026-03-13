@@ -49,8 +49,9 @@ namespace Vod2Tube.Application
                 throw new FileNotFoundException($"Video file not found: {finalFilePath}");
             }
 
-            // Get VOD metadata from database
+            // Get VOD metadata and pipeline record from database
             var vodMetadata = await _dbContext.TwitchVods.FirstOrDefaultAsync(v => v.Id == vodId, ct);
+            var pipeline = await _dbContext.Pipelines.FirstOrDefaultAsync(p => p.VodId == vodId, ct);
 
             var options = new VideoUploaderOptions();
             if (vodMetadata != null)
@@ -106,9 +107,45 @@ namespace Vod2Tube.Application
                 uploadedVideoId = uploadedVideo.Id;
             };
 
+            // Determine whether to resume an existing upload session or start a new one
+            string? savedUploadUri = pipeline?.ResumableUploadUri;
+            Uri uploadUri;
+
+            if (!string.IsNullOrEmpty(savedUploadUri))
+            {
+                yield return "Resuming interrupted upload...";
+                uploadUri = new Uri(savedUploadUri);
+            }
+            else
+            {
+                yield return "Initiating upload session...";
+                uploadUri = await videosInsertRequest.InitiateSessionAsync(ct);
+
+                // Persist the upload URI so the upload can be resumed if interrupted
+                if (pipeline != null)
+                {
+                    pipeline.ResumableUploadUri = uploadUri.AbsoluteUri;
+                    string? saveWarning = null;
+                    try
+                    {
+                        await _dbContext.SaveChangesAsync(ct);
+                    }
+                    catch (Exception)
+                    {
+                        // Best-effort save — the upload proceeds, but a restart cannot be resumed
+                        pipeline.ResumableUploadUri = string.Empty;
+                        _dbContext.Entry(pipeline).Property(p => p.ResumableUploadUri).IsModified = false;
+                        saveWarning = "Warning: Failed to save upload session URI; upload cannot be resumed if interrupted.";
+                    }
+
+                    if (saveWarning != null)
+                        yield return saveWarning;
+                }
+            }
+
             yield return $"Uploading video... 0%";
 
-            var uploadTask = videosInsertRequest.UploadAsync(ct);
+            var uploadTask = videosInsertRequest.ResumeAsync(uploadUri, ct);
 
             while (!uploadTask.IsCompleted)
             {
@@ -140,15 +177,14 @@ namespace Vod2Tube.Application
                 throw new Exception($"Upload failed: {uploadStatus.Exception?.Message ?? "Unknown error"}");
             }
 
-            // Store the YouTube video ID in the database after upload completes
-            if (!string.IsNullOrEmpty(uploadedVideoId))
+            // Store the YouTube video ID and clear the resumable URI now that the upload is complete.
+            // Only perform these DB updates when we have a confirmed video ID; if the video ID is
+            // missing the upload outcome is ambiguous and the URI should be kept for a potential retry.
+            if (pipeline != null && !string.IsNullOrEmpty(uploadedVideoId))
             {
-                var pipeline = await _dbContext.Pipelines.FirstOrDefaultAsync(p => p.VodId == vodId, ct);
-                if (pipeline != null)
-                {
-                    pipeline.YoutubeVideoId = uploadedVideoId;
-                    await _dbContext.SaveChangesAsync(ct);
-                }
+                pipeline.YoutubeVideoId = uploadedVideoId;
+                pipeline.ResumableUploadUri = string.Empty;
+                await _dbContext.SaveChangesAsync(ct);
             }
 
             yield return "Upload completed successfully!";
