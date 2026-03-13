@@ -33,7 +33,7 @@ namespace Vod2Tube.Application
                     TwitchGraphQLService twitchService = scope.ServiceProvider.GetRequiredService<TwitchGraphQLService>();
                     AppDbContext dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-                    await dbContext.Database.EnsureCreatedAsync();
+                    await dbContext.Database.MigrateAsync(stoppingToken);
 
                     List<string> channelNames = await dbContext.Channels
                         .Where(c => c.Active)

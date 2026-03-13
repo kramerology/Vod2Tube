@@ -14,6 +14,7 @@ namespace Vod2Tube.Domain
         public string ChatVideoFilePath { get; set; } = string.Empty;
         public string FinalVideoFilePath { get; set; } = string.Empty;
         public string YoutubeVideoId { get; set; } = string.Empty;
+        public string ResumableUploadUri { get; set; } = string.Empty;
 
         public bool Failed { get; set; } = false;
         public string FailReason { get; set; } = string.Empty;
