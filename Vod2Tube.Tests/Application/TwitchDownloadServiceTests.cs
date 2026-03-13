@@ -299,4 +299,60 @@ public class TwitchDownloadServiceTests
     {
         await Assert.That(TwitchDownloadService.IsValidVodId("123;rm -rf /")).IsFalse();
     }
+
+    // =========================================================================
+    // SegmentLength – configuration sanity check
+    // =========================================================================
+
+    /// <summary>
+    /// <see cref="TwitchDownloadService.SegmentLength"/> should be exactly 5 minutes.
+    /// This test documents the expected segment granularity for resumable rendering.
+    /// </summary>
+    [Test]
+    public async Task SegmentLength_IsFiveMinutes()
+    {
+        await Assert.That(TwitchDownloadService.SegmentLength).IsEqualTo(TimeSpan.FromMinutes(5));
+    }
+
+    // =========================================================================
+    // Segment count calculation
+    // =========================================================================
+
+    /// <summary>
+    /// A video shorter than one segment should produce exactly one segment.
+    /// </summary>
+    [Test]
+    public async Task SegmentCount_DurationLessThanOneSegment_ReturnsOne()
+    {
+        double totalSeconds = 120; // 2 minutes
+        int count = (int)Math.Ceiling(totalSeconds / TwitchDownloadService.SegmentLength.TotalSeconds);
+
+        await Assert.That(count).IsEqualTo(1);
+    }
+
+    /// <summary>
+    /// A video whose duration is an exact multiple of the segment length should
+    /// produce the expected number of segments with no extra empty segment.
+    /// </summary>
+    [Test]
+    public async Task SegmentCount_ExactMultiple_ReturnsExactCount()
+    {
+        double totalSeconds = TwitchDownloadService.SegmentLength.TotalSeconds * 3; // 15 minutes
+        int count = (int)Math.Ceiling(totalSeconds / TwitchDownloadService.SegmentLength.TotalSeconds);
+
+        await Assert.That(count).IsEqualTo(3);
+    }
+
+    /// <summary>
+    /// A video with a remainder beyond the last full segment should produce one
+    /// extra segment for the tail.
+    /// </summary>
+    [Test]
+    public async Task SegmentCount_WithRemainder_ProducesExtraSegment()
+    {
+        double totalSeconds = TwitchDownloadService.SegmentLength.TotalSeconds * 2 + 30; // 10:30
+        int count = (int)Math.Ceiling(totalSeconds / TwitchDownloadService.SegmentLength.TotalSeconds);
+
+        await Assert.That(count).IsEqualTo(3);
+    }
 }

@@ -291,6 +291,7 @@ namespace Vod2Tube.Application
 
         private static readonly Regex _encoderNameRegex = new(@"\b(h264_amf|h264_nvenc|h264_qsv)\b", RegexOptions.Compiled);
         private static readonly Regex _ffmpegProgressRegex = new(@"frame=\s*(\d+).*time=(\S+)", RegexOptions.Compiled);
+        internal static readonly TimeSpan SegmentLength = TimeSpan.FromMinutes(5);
 
         /// <summary>
         /// Selects the best available H.264 encoder from the supplied ffmpeg encoder list output.
@@ -344,27 +345,13 @@ namespace Vod2Tube.Application
             }
         }
 
-        public async IAsyncEnumerable<string> CombineVideosAsync(FileInfo vodFile, FileInfo chatVideoFile, FileInfo outputFile, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        /// <summary>
+        /// Runs ffmpeg with the given arguments, yielding progress status strings.
+        /// Throws <see cref="InvalidOperationException"/> if ffmpeg exits with a non-zero code.
+        /// </summary>
+        private async IAsyncEnumerable<string> RunFfmpegAsync(string arguments, string errorContext,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
-            if (!File.Exists(vodFile.FullName))
-                throw new FileNotFoundException($"VOD file not found: {vodFile.FullName}");
-            if (!File.Exists(chatVideoFile.FullName))
-                throw new FileNotFoundException($"Chat video file not found: {chatVideoFile.FullName}");
-
-            string encoder = _cachedEncoder.Value;
-
-            string pixelFormat = encoder == "libx264" ? "yuv420p" : "nv12";
-
-            string encoderArgs = encoder switch
-            {
-                "h264_amf"   => $"-c:v h264_amf -rc:v vbr_peak -b:v 5M -maxrate 6M -bufsize 10M -usage transcoding -profile:v high -level 4.1 -qmin 18 -qmax 28",
-                "h264_nvenc" => $"-c:v h264_nvenc -b:v 5M -maxrate 6M -bufsize 10M -profile:v high -level 4.1",
-                "h264_qsv"   => $"-c:v h264_qsv -b:v 5M -maxrate 6M -bufsize 10M -profile:v high -level 4.1",
-                _            => $"-c:v libx264 -b:v 5M -maxrate 6M -bufsize 10M -profile:v high -level 4.1",
-            };
-
-            string arguments = $"-i \"{vodFile.FullName}\" -i \"{chatVideoFile.FullName}\" -filter_complex \"[0:v][1:v]hstack=inputs=2,format={pixelFormat}\" {encoderArgs} -c:a copy \"{outputFile.FullName}\"";
-
             var psi = new ProcessStartInfo
             {
                 FileName = _ffmpegPath,
@@ -384,48 +371,168 @@ namespace Vod2Tube.Application
             var statusQueue = new System.Collections.Concurrent.ConcurrentQueue<string>();
             var errorOutput = new StringBuilder();
 
-            process.ErrorDataReceived += (sender, e) =>
+            process.ErrorDataReceived += (_, e) =>
             {
                 if (string.IsNullOrEmpty(e.Data)) return;
                 errorOutput.AppendLine(e.Data);
                 var match = _ffmpegProgressRegex.Match(e.Data);
                 if (match.Success)
-                {
                     statusQueue.Enqueue($"Encoding frame {match.Groups[1].Value}, time {match.Groups[2].Value}");
-                }
             };
 
             process.Start();
             process.BeginErrorReadLine();
-
-            yield return $"Combining videos using {encoder}";
 
             var waitTask = process.WaitForExitAsync(cancellationToken);
 
             while (!waitTask.IsCompleted)
             {
                 while (statusQueue.TryDequeue(out var status))
-                {
                     yield return status;
-                }
                 await Task.Delay(100, cancellationToken);
             }
 
             // Drain any remaining statuses after process exit
             while (statusQueue.TryDequeue(out var status))
-            {
                 yield return status;
-            }
 
             await waitTask;
 
             if (process.ExitCode != 0)
             {
                 string errorText = errorOutput.ToString();
-                _logger.LogError("ffmpeg exited with code {ExitCode} while combining videos. Arguments: {Arguments}. Stderr: {Stderr}",
-                    process.ExitCode, arguments, errorText);
-                throw new InvalidOperationException($"ffmpeg exited with code {process.ExitCode} while combining videos.");
+                _logger.LogError("ffmpeg exited with code {ExitCode} {Context}. Arguments: {Arguments}. Stderr: {Stderr}",
+                    process.ExitCode, errorContext, arguments, errorText);
+                throw new InvalidOperationException($"ffmpeg exited with code {process.ExitCode} {errorContext}.");
             }
+        }
+
+        /// <summary>
+        /// Returns the duration of the given media file in seconds using ffprobe.
+        /// </summary>
+        /// <param name="filePath">Absolute path to the media file to probe.</param>
+        /// <returns>Duration in seconds as a <see cref="double"/>.</returns>
+        /// <exception cref="FormatException">
+        /// Thrown when ffprobe output cannot be parsed as a floating-point number.
+        /// </exception>
+        private double GetVideoDuration(string filePath)
+        {
+            string output = RunProcessWithOutput(_ffprobePath,
+                $"-v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 \"{filePath}\"").Trim();
+            if (double.TryParse(output, NumberStyles.Float, CultureInfo.InvariantCulture, out double duration))
+                return duration;
+            throw new FormatException($"Unable to parse duration from ffprobe output: '{output}' for file: {filePath}");
+        }
+
+        public async IAsyncEnumerable<string> CombineVideosAsync(FileInfo vodFile, FileInfo chatVideoFile, FileInfo outputFile, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            if (!File.Exists(vodFile.FullName))
+                throw new FileNotFoundException($"VOD file not found: {vodFile.FullName}");
+            if (!File.Exists(chatVideoFile.FullName))
+                throw new FileNotFoundException($"Chat video file not found: {chatVideoFile.FullName}");
+
+            string encoder = _cachedEncoder.Value;
+
+            string pixelFormat = encoder == "libx264" ? "yuv420p" : "nv12";
+
+            string encoderArgs = encoder switch
+            {
+                "h264_amf"   => "-c:v h264_amf -rc:v vbr_peak -b:v 5M -maxrate 6M -bufsize 10M -usage transcoding -profile:v high -level 4.1 -qmin 18 -qmax 28",
+                "h264_nvenc" => "-c:v h264_nvenc -b:v 5M -maxrate 6M -bufsize 10M -profile:v high -level 4.1",
+                "h264_qsv"   => "-c:v h264_qsv -b:v 5M -maxrate 6M -bufsize 10M -profile:v high -level 4.1",
+                _            => "-c:v libx264 -b:v 5M -maxrate 6M -bufsize 10M -profile:v high -level 4.1",
+            };
+
+            double totalDuration = GetVideoDuration(vodFile.FullName);
+            if (totalDuration <= 0)
+                throw new InvalidOperationException($"Could not determine a valid duration for VOD file: {vodFile.FullName}");
+
+            int segmentCount = (int)Math.Ceiling(totalDuration / SegmentLength.TotalSeconds);
+
+            // Segments are stored alongside the output file in a dedicated subdirectory.
+            string segmentsDir = Path.Combine(
+                outputFile.DirectoryName ?? ".",
+                Path.GetFileNameWithoutExtension(outputFile.Name) + "_segments");
+            Directory.CreateDirectory(segmentsDir);
+
+            yield return $"Combining videos using {encoder} in {segmentCount} segment(s)";
+
+            var segmentFiles = new List<string>(segmentCount);
+
+            for (int i = 0; i < segmentCount; i++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                double startSec    = i * SegmentLength.TotalSeconds;
+                double segDuration = Math.Min(SegmentLength.TotalSeconds, totalDuration - startSec);
+                string segmentFile    = Path.Combine(segmentsDir, $"segment_{i:D4}.mp4");
+                string segmentTmpFile = segmentFile + ".tmp";
+                segmentFiles.Add(segmentFile);
+
+                if (File.Exists(segmentFile))
+                {
+                    _logger.LogInformation("Segment {Index}/{Total} already exists, skipping", i + 1, segmentCount);
+                    yield return $"Segment {i + 1}/{segmentCount} already rendered, skipping";
+                    continue;
+                }
+
+                // Remove any leftover temp file from a previous interrupted run.
+                if (File.Exists(segmentTmpFile))
+                    File.Delete(segmentTmpFile);
+
+                string startStr    = startSec.ToString("F3", CultureInfo.InvariantCulture);
+                string durationStr = segDuration.ToString("F3", CultureInfo.InvariantCulture);
+
+                // Use input-level -ss for fast seeking into both streams, then limit
+                // output duration with -t so the segment covers exactly [start, start+duration).
+                string segArguments =
+                    $"-ss {startStr} -i \"{vodFile.FullName}\" " +
+                    $"-ss {startStr} -i \"{chatVideoFile.FullName}\" " +
+                    $"-t {durationStr} " +
+                    $"-filter_complex \"[0:v][1:v]hstack=inputs=2,format={pixelFormat}\" " +
+                    $"{encoderArgs} -c:a copy \"{segmentTmpFile}\"";
+
+                yield return $"Encoding segment {i + 1}/{segmentCount}";
+                await foreach (var status in RunFfmpegAsync(segArguments, $"while encoding segment {i + 1}/{segmentCount}", cancellationToken))
+                    yield return status;
+
+                // Atomic promotion: only the successfully-completed segment file is used for resume detection.
+                File.Move(segmentTmpFile, segmentFile);
+                _logger.LogInformation("Segment {Index}/{Total} complete", i + 1, segmentCount);
+                yield return $"Segment {i + 1}/{segmentCount} complete";
+            }
+
+            // Concatenate all segments into the final output without re-encoding.
+            yield return "Concatenating segments into final video";
+
+            string concatListPath = Path.Combine(segmentsDir, "concat_list.txt");
+            // ffmpeg concat demuxer requires forward-slash paths on all platforms.
+            await File.WriteAllLinesAsync(
+                concatListPath,
+                segmentFiles.Select(f => $"file '{f.Replace('\\', '/')}'"),
+                cancellationToken);
+
+            string concatArguments =
+                $"-f concat -safe 0 -i \"{concatListPath}\" " +
+                $"-c copy -movflags +faststart \"{outputFile.FullName}\"";
+
+            await foreach (var status in RunFfmpegAsync(concatArguments, "while concatenating segments", cancellationToken))
+                yield return status;
+
+            // Best-effort cleanup of the segments directory after a successful concatenation.
+            foreach (var f in segmentFiles)
+            {
+                try { File.Delete(f); }
+                catch (Exception ex) { _logger.LogDebug(ex, "Failed to delete segment file {Path}", f); }
+            }
+            try
+            {
+                File.Delete(concatListPath);
+                Directory.Delete(segmentsDir);
+            }
+            catch (Exception ex) { _logger.LogDebug(ex, "Failed to remove segments directory {Path}", segmentsDir); }
+
+            yield return "Done combining videos";
         }
 
         public async IAsyncEnumerable<string> DownloadChatNewAsync(string vodId, DirectoryInfo tempDir, FileInfo finalFile, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
