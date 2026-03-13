@@ -490,7 +490,7 @@ namespace Vod2Tube.Application
                     $"-ss {startStr} -i \"{chatVideoFile.FullName}\" " +
                     $"-t {durationStr} " +
                     $"-filter_complex \"[0:v][1:v]hstack=inputs=2,format={pixelFormat}\" " +
-                    $"{encoderArgs} -c:a copy \"{segmentTmpFile}\"";
+                    $"{encoderArgs} -c:a copy -f mp4 \"{segmentTmpFile}\"";
 
                 yield return $"Encoding segment {i + 1}/{segmentCount}";
                 await foreach (var status in RunFfmpegAsync(segArguments, $"while encoding segment {i + 1}/{segmentCount}", cancellationToken))
