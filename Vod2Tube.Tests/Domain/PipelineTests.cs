@@ -27,6 +27,7 @@ public class PipelineTests
         await Assert.That(pipeline.ChatVideoFilePath).IsEqualTo(string.Empty);
         await Assert.That(pipeline.FinalVideoFilePath).IsEqualTo(string.Empty);
         await Assert.That(pipeline.YoutubeVideoId).IsEqualTo(string.Empty);
+        await Assert.That(pipeline.ResumableUploadUri).IsEqualTo(string.Empty);
         await Assert.That(pipeline.FailReason).IsEqualTo(string.Empty);
     }
 
