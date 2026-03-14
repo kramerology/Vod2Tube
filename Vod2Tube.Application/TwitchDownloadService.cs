@@ -432,10 +432,44 @@ namespace Vod2Tube.Application
         /// </exception>
         private double GetVideoDuration(string filePath)
         {
-            string output = RunProcessWithOutput(_ffprobePath,
-                $"-v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 \"{filePath}\"").Trim();
+            var arguments =
+                $"-v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 \"{filePath}\"";
+
+            var psi = new ProcessStartInfo
+            {
+                FileName = _ffprobePath,
+                Arguments = arguments,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true,
+                StandardOutputEncoding = Encoding.UTF8,
+                StandardErrorEncoding = Encoding.UTF8
+            };
+
+            using var process = new Process { StartInfo = psi };
+
+            if (!process.Start())
+            {
+                throw new InvalidOperationException($"Failed to start ffprobe for file: {filePath}");
+            }
+
+            string output = process.StandardOutput.ReadToEnd();
+            string errorOutput = process.StandardError.ReadToEnd();
+
+            process.WaitForExit();
+
+            if (process.ExitCode != 0)
+            {
+                throw new InvalidOperationException(
+                    $"ffprobe exited with code {process.ExitCode} while probing '{filePath}'. " +
+                    $"Arguments: {arguments}. Stderr: {errorOutput}");
+            }
+
+            output = output.Trim();
             if (double.TryParse(output, NumberStyles.Float, CultureInfo.InvariantCulture, out double duration))
                 return duration;
+
             throw new FormatException($"Unable to parse duration from ffprobe output: '{output}' for file: {filePath}");
         }
 
