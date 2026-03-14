@@ -383,7 +383,22 @@ namespace Vod2Tube.Application
             process.Start();
             process.BeginErrorReadLine();
 
-            var waitTask = process.WaitForExitAsync(cancellationToken);
+            using var registration = cancellationToken.Register(() =>
+            {
+                try
+                {
+                    if (!process.HasExited)
+                    {
+                        process.Kill(entireProcessTree: true);
+                    }
+                }
+                catch
+                {
+                    // Ignore exceptions thrown when trying to kill the process (e.g., race conditions).
+                }
+            });
+
+            var waitTask = process.WaitForExitAsync(CancellationToken.None);
 
             while (!waitTask.IsCompleted)
             {
