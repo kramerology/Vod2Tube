@@ -514,6 +514,17 @@ namespace Vod2Tube.Application
 
                 double startSec    = i * SegmentLength.TotalSeconds;
                 double segDuration = Math.Min(SegmentLength.TotalSeconds, totalDuration - startSec);
+
+                // Guard against floating-point rounding causing a non-positive segment duration,
+                // which would lead to an invalid "-t 0" (or negative) ffmpeg invocation.
+                if (segDuration <= 0)
+                {
+                    _logger.LogDebug(
+                        "Computed non-positive segment duration {Duration} at index {Index}; stopping segmentation loop.",
+                        segDuration, i);
+                    break;
+                }
+
                 string segmentFile    = Path.Combine(segmentsDir, $"segment_{i:D4}.mp4");
                 string segmentTmpFile = segmentFile + ".tmp";
                 segmentFiles.Add(segmentFile);
