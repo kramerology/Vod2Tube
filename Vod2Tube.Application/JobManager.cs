@@ -55,6 +55,24 @@ namespace Vod2Tube.Application
                     }
 
                     await ProcessJobToCompletionAsync(job, dbContext, scope.ServiceProvider, _logger, stoppingToken);
+
+                    // If the job was paused during processing, wait for it to be unpaused
+                    // before picking up any more work.
+                    if (job.Paused)
+                    {
+                        _logger.LogInformation("Job {VodId} is paused; waiting for it to be unpaused", job.VodId);
+                        while (!stoppingToken.IsCancellationRequested)
+                        {
+                            await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
+                            if (!await IsJobPausedAsync(dbContext, job.VodId, stoppingToken))
+                            {
+                                job.Paused = false;
+                                break;
+                            }
+                        }
+                        if (!stoppingToken.IsCancellationRequested)
+                            _logger.LogInformation("Job {VodId} unpaused; resuming processing", job.VodId);
+                    }
                 }
                 catch (OperationCanceledException)
                 {
@@ -72,7 +90,7 @@ namespace Vod2Tube.Application
         internal static async Task<Pipeline?> FindHighestPriorityJobAsync(AppDbContext dbContext, CancellationToken ct)
         {
             return await dbContext.Pipelines
-                .Where(p => StagePriority.Contains(p.Stage) && !p.Failed)
+                .Where(p => StagePriority.Contains(p.Stage) && !p.Failed && !p.Paused)
                 .OrderByDescending(p =>
                     p.Stage == "Uploading"            ? 9 :
                     p.Stage == "PendingUpload"        ? 8 :
@@ -94,6 +112,35 @@ namespace Vod2Tube.Application
                 job.FailCount = 0;
             job.Stage = stage;
             await dbContext.SaveChangesAsync(ct);
+        }
+
+        /// <summary>
+        /// Returns true if the job's Paused flag is set in the database.
+        /// Uses AsNoTracking so it does not overwrite any pending entity changes.
+        /// </summary>
+        internal static async Task<bool> IsJobPausedAsync(AppDbContext dbContext, string vodId, CancellationToken ct)
+        {
+            return await dbContext.Pipelines
+                .AsNoTracking()
+                .Where(p => p.VodId == vodId)
+                .Select(p => p.Paused)
+                .FirstOrDefaultAsync(ct);
+        }
+
+        /// <summary>
+        /// Checks whether the job has been paused externally.  If so, sets <see cref="Pipeline.Paused"/>
+        /// on the in-memory entity, logs the event, and returns <c>true</c> so the caller can
+        /// immediately return and stop further processing.
+        /// </summary>
+        private static async Task<bool> DetectAndApplyPauseAsync(AppDbContext dbContext, Pipeline job, ILogger logger, CancellationToken ct)
+        {
+            if (await IsJobPausedAsync(dbContext, job.VodId, ct))
+            {
+                job.Paused = true;
+                logger.LogInformation("Job {VodId} paused at stage {Stage}", job.VodId, job.Stage);
+                return true;
+            }
+            return false;
         }
 
         internal static async Task ProcessJobToCompletionAsync(Pipeline job, AppDbContext dbContext, IServiceProvider services, ILogger logger, CancellationToken ct)
@@ -141,6 +188,8 @@ namespace Vod2Tube.Application
                                 {
                                     logger.LogWarning(ex, "Failed to save progress for job {VodId}", job.VodId);
                                 }
+                                if (await DetectAndApplyPauseAsync(dbContext, job, logger, ct))
+                                    return;
                             }
                         }
                         Console.WriteLine(); // end the in-place progress line
@@ -179,6 +228,8 @@ namespace Vod2Tube.Application
                                     logger.LogInformation("{Status}", status);
                                 try { await dbContext.SaveChangesAsync(ct); }
                                 catch (Exception ex) { logger.LogWarning(ex, "Failed to save progress for job {VodId}", job.VodId); }
+                                if (await DetectAndApplyPauseAsync(dbContext, job, logger, ct))
+                                    return;
                             }
                         }
                         Console.WriteLine(); // end the in-place progress line
@@ -231,6 +282,8 @@ namespace Vod2Tube.Application
                                     logger.LogInformation("{Status}", status);
                                 try { await dbContext.SaveChangesAsync(ct); }
                                 catch (Exception ex) { logger.LogWarning(ex, "Failed to save progress for job {VodId}", job.VodId); }
+                                if (await DetectAndApplyPauseAsync(dbContext, job, logger, ct))
+                                    return;
                             }
                         }
                         Console.WriteLine(); // end the in-place progress line
@@ -283,6 +336,8 @@ namespace Vod2Tube.Application
                                     logger.LogInformation("{Status}", status);
                                 try { await dbContext.SaveChangesAsync(ct); }
                                 catch (Exception ex) { logger.LogWarning(ex, "Failed to save progress for job {VodId}", job.VodId); }
+                                if (await DetectAndApplyPauseAsync(dbContext, job, logger, ct))
+                                    return;
                             }
                         }
                         Console.WriteLine(); // end the in-place progress line
