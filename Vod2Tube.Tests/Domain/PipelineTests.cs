@@ -45,6 +45,17 @@ public class PipelineTests
     }
 
     /// <summary>
+    /// The <see cref="Pipeline.Paused"/> property should default to false.
+    /// </summary>
+    [Test]
+    public async Task Pipeline_PausedProperty_DefaultsFalse()
+    {
+        var pipeline = new Pipeline();
+
+        await Assert.That(pipeline.Paused).IsEqualTo(false);
+    }
+
+    /// <summary>
     /// All properties assigned to a <see cref="Pipeline"/> instance should round-trip
     /// correctly.
     /// </summary>
