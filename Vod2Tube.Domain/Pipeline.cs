@@ -19,5 +19,7 @@ namespace Vod2Tube.Domain
         public bool Failed { get; set; } = false;
         public string FailReason { get; set; } = string.Empty;
         public int FailCount { get; set; } = 0;
+
+        public bool Paused { get; set; } = false;
     }
 }
