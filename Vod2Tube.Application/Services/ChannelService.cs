@@ -20,6 +20,7 @@ namespace Vod2Tube.Application.Services
 
         public async Task<Channel> AddNewChannelAsync(Channel channel)
         {
+            channel.ChannelName = channel.ChannelName.Trim().ToLowerInvariant();
             channel.AddedAtUTC = DateTime.UtcNow;
             _dbContext.Channels.Add(channel);
             await _dbContext.SaveChangesAsync();
@@ -37,7 +38,7 @@ namespace Vod2Tube.Application.Services
             if (existing == null)
                 return false;
 
-            existing.ChannelName = channel.ChannelName;
+            existing.ChannelName = channel.ChannelName.Trim().ToLowerInvariant();
             existing.Active = channel.Active;
 
             await _dbContext.SaveChangesAsync();
