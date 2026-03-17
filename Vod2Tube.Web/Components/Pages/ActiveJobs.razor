@@ -1,0 +1,283 @@
+@page "/jobs"
+@rendermode InteractiveServer
+@inject PipelineService PipelineService
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@implements IAsyncDisposable
+
+<PageTitle>Active Jobs – Vod2Tube</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+    <MudText Typo="Typo.h5">
+        <MudIcon Icon="@Icons.Material.Filled.PlayCircle" Class="mr-2" Style="vertical-align:middle" />
+        Active Jobs
+    </MudText>
+    <MudSpacer />
+    <MudChip T="string" Color="Color.Info" Size="Size.Small" Icon="@Icons.Material.Filled.Refresh">
+        Auto-refreshes every 3s
+    </MudChip>
+</MudStack>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-4" />
+}
+
+@if (_jobs.Count == 0 && !_loading)
+{
+    <MudPaper Class="pa-8 d-flex flex-column align-center" Elevation="1">
+        <MudIcon Icon="@Icons.Material.Filled.CheckCircleOutline" Color="Color.Success" Style="font-size:4rem" />
+        <MudText Typo="Typo.h6" Class="mt-3 mud-text-secondary">No active jobs</MudText>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">
+            All caught up! New jobs will appear here when channels have VODs to process.
+        </MudText>
+    </MudPaper>
+}
+else
+{
+        <MudGrid>
+        @foreach (var job in _jobs)
+        {
+            <MudItem xs="12">
+                <MudCard Elevation="2" Class="@(job.Stage is "Uploading" or "DownloadingVod" or "DownloadingChat" or "RenderingChat" or "Combining" ? "job-card-active" : "")">
+                    <MudCardContent>
+                        <MudGrid>
+                            <!-- Title + Channel -->
+                            <MudItem xs="12" md="4">
+                                <MudText Typo="Typo.subtitle1" Style="font-weight:600">
+                                    @job.Title
+                                </MudText>
+                                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                                    <MudIcon Icon="@Icons.Material.Filled.Tv" Size="Size.Small" Color="Color.Secondary" />
+                                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@job.ChannelName</MudText>
+                                    @if (job.Duration != TimeSpan.Zero)
+                                    {
+                                        <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                                            · @FormatDuration(job.Duration)
+                                        </MudText>
+                                    }
+                                </MudStack>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                    VOD: @job.VodId
+                                </MudText>
+                            </MudItem>
+
+                            <!-- Stage + Progress -->
+                            <MudItem xs="12" md="5">
+                                <MudStack Spacing="1">
+                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                        <MudChip T="string"
+                                            Color="@GetStageColor(job)"
+                                            Size="Size.Small"
+                                            Variant="Variant.Filled"
+                                            Icon="@GetStageIcon(job)">
+                                            @GetStageLabel(job)
+                                        </MudChip>
+                                        @if (job.Paused)
+                                        {
+                                            <MudChip T="string" Color="Color.Warning" Size="Size.Small" Icon="@Icons.Material.Filled.Pause">
+                                                Paused
+                                            </MudChip>
+                                        }
+                                        @if (job.Failed)
+                                        {
+                                            <MudChip T="string" Color="Color.Error" Size="Size.Small" Icon="@Icons.Material.Filled.Error">
+                                                Failed (@job.FailCount/3)
+                                            </MudChip>
+                                        }
+                                    </MudStack>
+                                    @if (!string.IsNullOrWhiteSpace(job.Description))
+                                    {
+                                        <MudText Typo="Typo.caption" Class="mud-text-secondary" Style="word-break:break-all">
+                                            @job.Description
+                                        </MudText>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(job.FailReason) && job.Failed)
+                                    {
+                                        <MudAlert Severity="Severity.Error" Dense="true" Class="mt-1">
+                                            @job.FailReason
+                                        </MudAlert>
+                                    }
+                                </MudStack>
+                            </MudItem>
+
+                            <!-- Actions -->
+                            <MudItem xs="12" md="3" Style="text-align:right">
+                                <MudButtonGroup Variant="Variant.Outlined" Size="Size.Small">
+                                    @if (job.Paused)
+                                    {
+                                        <MudButton Color="Color.Success"
+                                            StartIcon="@Icons.Material.Filled.PlayArrow"
+                                            OnClick="@(() => ResumeJobAsync(job))">
+                                            Resume
+                                        </MudButton>
+                                    }
+                                    else if (!job.Failed)
+                                    {
+                                        <MudButton Color="Color.Warning"
+                                            StartIcon="@Icons.Material.Filled.Pause"
+                                            OnClick="@(() => PauseJobAsync(job))">
+                                            Pause
+                                        </MudButton>
+                                    }
+                                    @if (job.Failed)
+                                    {
+                                        <MudButton Color="Color.Primary"
+                                            StartIcon="@Icons.Material.Filled.Refresh"
+                                            OnClick="@(() => RetryJobAsync(job))">
+                                            Retry
+                                        </MudButton>
+                                    }
+                                    <MudButton Color="Color.Error"
+                                        StartIcon="@Icons.Material.Filled.Cancel"
+                                        OnClick="@(() => CancelJobAsync(job))">
+                                        Cancel
+                                    </MudButton>
+                                </MudButtonGroup>
+                            </MudItem>
+                        </MudGrid>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        }
+    </MudGrid>
+}
+
+@code {
+    private List<PipelineJobDto> _jobs = new();
+    private bool _loading = true;
+    private PeriodicTimer? _timer;
+    private CancellationTokenSource _cts = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadJobsAsync();
+        _ = StartPollingAsync();
+    }
+
+    private async Task StartPollingAsync()
+    {
+        _timer = new PeriodicTimer(TimeSpan.FromSeconds(3));
+        try
+        {
+            while (await _timer.WaitForNextTickAsync(_cts.Token))
+            {
+                await LoadJobsAsync();
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    private async Task LoadJobsAsync()
+    {
+        _jobs = await PipelineService.GetActiveJobsAsync();
+        _loading = false;
+    }
+
+    private async Task PauseJobAsync(PipelineJobDto job)
+    {
+        await PipelineService.PauseJobAsync(job.VodId);
+        Snackbar.Add($"Job '{job.Title}' paused.", Severity.Warning);
+        await LoadJobsAsync();
+    }
+
+    private async Task ResumeJobAsync(PipelineJobDto job)
+    {
+        await PipelineService.ResumeJobAsync(job.VodId);
+        Snackbar.Add($"Job '{job.Title}' resumed.", Severity.Success);
+        await LoadJobsAsync();
+    }
+
+    private async Task RetryJobAsync(PipelineJobDto job)
+    {
+        await PipelineService.RetryJobAsync(job.VodId);
+        Snackbar.Add($"Job '{job.Title}' reset for retry.", Severity.Info);
+        await LoadJobsAsync();
+    }
+
+    private async Task CancelJobAsync(PipelineJobDto job)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Cancel Job",
+            $"Cancel processing for '{job.Title}'? This will stop the pipeline for this VOD.",
+            yesText: "Cancel Job", cancelText: "Keep");
+
+        if (confirmed == true)
+        {
+            await PipelineService.CancelJobAsync(job.VodId);
+            Snackbar.Add($"Job '{job.Title}' cancelled.", Severity.Warning);
+            await LoadJobsAsync();
+        }
+    }
+
+    private static Color GetStageColor(PipelineJobDto job)
+    {
+        if (job.Failed) return Color.Error;
+        if (job.Paused) return Color.Warning;
+        return job.Stage switch
+        {
+            "Pending" => Color.Default,
+            "DownloadingVod" => Color.Primary,
+            "PendingDownloadChat" => Color.Info,
+            "DownloadingChat" => Color.Primary,
+            "PendingRenderingChat" => Color.Info,
+            "RenderingChat" => Color.Secondary,
+            "PendingCombining" => Color.Info,
+            "Combining" => Color.Warning,
+            "PendingUpload" => Color.Info,
+            "Uploading" => Color.Success,
+            _ => Color.Default
+        };
+    }
+
+    private static string GetStageIcon(PipelineJobDto job)
+    {
+        if (job.Failed) return Icons.Material.Filled.Error;
+        if (job.Paused) return Icons.Material.Filled.Pause;
+        return job.Stage switch
+        {
+            "Pending" => Icons.Material.Filled.HourglassEmpty,
+            "DownloadingVod" or "DownloadingChat" => Icons.Material.Filled.Download,
+            "PendingDownloadChat" or "PendingRenderingChat" or "PendingCombining" or "PendingUpload"
+                => Icons.Material.Filled.HourglassTop,
+            "RenderingChat" => Icons.Material.Filled.Chat,
+            "Combining" => Icons.Material.Filled.MergeType,
+            "Uploading" => Icons.Material.Filled.CloudUpload,
+            _ => Icons.Material.Outlined.Circle
+        };
+    }
+
+    private static string GetStageLabel(PipelineJobDto job)
+    {
+        if (job.Failed) return "Failed";
+        return job.Stage switch
+        {
+            "Pending" => "Pending",
+            "DownloadingVod" => "Downloading VOD",
+            "PendingDownloadChat" => "Awaiting Chat Download",
+            "DownloadingChat" => "Downloading Chat",
+            "PendingRenderingChat" => "Awaiting Chat Render",
+            "RenderingChat" => "Rendering Chat",
+            "PendingCombining" => "Awaiting Combine",
+            "Combining" => "Combining",
+            "PendingUpload" => "Awaiting Upload",
+            "Uploading" => "Uploading",
+            _ => job.Stage
+        };
+    }
+
+    private static string FormatDuration(TimeSpan ts)
+    {
+        if (ts.TotalHours >= 1)
+            return $"{(int)ts.TotalHours}h {ts.Minutes}m";
+        return $"{ts.Minutes}m {ts.Seconds}s";
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await _cts.CancelAsync();
+        _timer?.Dispose();
+        _cts.Dispose();
+    }
+}

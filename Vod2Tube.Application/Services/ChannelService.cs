@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Vod2Tube.Domain;
 using Vod2Tube.Infrastructure;
 
@@ -10,6 +11,11 @@ namespace Vod2Tube.Application.Services
         public ChannelService(AppDbContext dbContext)
         {
             _dbContext = dbContext;
+        }
+
+        public async Task<List<Channel>> GetAllChannelsAsync()
+        {
+            return await _dbContext.Channels.OrderBy(c => c.ChannelName).ToListAsync();
         }
 
         public async Task<Channel> AddNewChannelAsync(Channel channel)
