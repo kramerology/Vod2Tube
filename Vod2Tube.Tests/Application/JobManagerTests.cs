@@ -523,6 +523,104 @@ public class JobManagerTests
         await Assert.That(result!.VodId).IsEqualTo("pending");
     }
 
+    // =========================================================================
+    // Pause support
+    // =========================================================================
+
+    [Test]
+    public async Task FindHighestPriorityJob_PausedJob_IsNotReturned()
+    {
+        await using var ctx = CreateInMemoryContext(nameof(FindHighestPriorityJob_PausedJob_IsNotReturned));
+        ctx.Pipelines.Add(new Pipeline { VodId = "paused",  Stage = "Pending", Paused = true });
+        ctx.Pipelines.Add(new Pipeline { VodId = "active",  Stage = "Pending" });
+        await ctx.SaveChangesAsync();
+
+        var result = await JobManager.FindHighestPriorityJobAsync(ctx, CancellationToken.None);
+
+        await Assert.That(result!.VodId).IsEqualTo("active");
+    }
+
+    [Test]
+    public async Task FindHighestPriorityJob_AllJobsPaused_ReturnsNull()
+    {
+        await using var ctx = CreateInMemoryContext(nameof(FindHighestPriorityJob_AllJobsPaused_ReturnsNull));
+        ctx.Pipelines.Add(new Pipeline { VodId = "a", Stage = "Pending",       Paused = true });
+        ctx.Pipelines.Add(new Pipeline { VodId = "b", Stage = "DownloadingVod", Paused = true });
+        await ctx.SaveChangesAsync();
+
+        var result = await JobManager.FindHighestPriorityJobAsync(ctx, CancellationToken.None);
+
+        await Assert.That(result).IsNull();
+    }
+
+    [Test]
+    public async Task IsJobPausedAsync_ReturnsTrueWhenPausedInDb()
+    {
+        await using var ctx = CreateInMemoryContext(nameof(IsJobPausedAsync_ReturnsTrueWhenPausedInDb));
+        ctx.Pipelines.Add(new Pipeline { VodId = "v1", Stage = "Pending", Paused = true });
+        await ctx.SaveChangesAsync();
+
+        bool result = await JobManager.IsJobPausedAsync(ctx, "v1", CancellationToken.None);
+
+        await Assert.That(result).IsEqualTo(true);
+    }
+
+    [Test]
+    public async Task IsJobPausedAsync_ReturnsFalseWhenNotPaused()
+    {
+        await using var ctx = CreateInMemoryContext(nameof(IsJobPausedAsync_ReturnsFalseWhenNotPaused));
+        ctx.Pipelines.Add(new Pipeline { VodId = "v1", Stage = "Pending", Paused = false });
+        await ctx.SaveChangesAsync();
+
+        bool result = await JobManager.IsJobPausedAsync(ctx, "v1", CancellationToken.None);
+
+        await Assert.That(result).IsEqualTo(false);
+    }
+
+    [Test]
+    public async Task ProcessJob_PausedDuringDownloadingVod_ReturnEarlyWithJobPausedSet()
+    {
+        await using var ctx = CreateInMemoryContext(nameof(ProcessJob_PausedDuringDownloadingVod_ReturnEarlyWithJobPausedSet));
+        var job = new Pipeline { VodId = "v1", Stage = "Pending" };
+        ctx.Pipelines.Add(job);
+        await ctx.SaveChangesAsync();
+
+        // The stub downloader marks the job as paused in the DB on its first yield.
+        var downloader = new PausingVodDownloader(ctx);
+
+        await JobManager.ProcessJobToCompletionAsync(job, ctx, CreateWorkerProvider(downloader), NullLogger.Instance, CancellationToken.None);
+
+        await Assert.That(job.Paused).IsEqualTo(true);
+        await Assert.That(job.Stage).IsEqualTo("DownloadingVod");
+    }
+
+    /// <summary>
+    /// A <see cref="VodDownloader"/> stub that marks the job as paused in the database on its
+    /// first status yield, simulating a pause request that arrives during processing.
+    /// </summary>
+    private sealed class PausingVodDownloader : VodDownloader
+    {
+        private readonly AppDbContext _ctx;
+
+        public PausingVodDownloader(AppDbContext ctx) : base(null!)
+        {
+            _ctx = ctx;
+        }
+
+        public override async IAsyncEnumerable<string> RunAsync(string vodId,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
+        {
+            // Simulate an external pause being written to the database before the first progress update.
+            var pipeline = await _ctx.Pipelines.FindAsync(new object[] { vodId }, ct);
+            if (pipeline != null)
+            {
+                pipeline.Paused = true;
+                await _ctx.SaveChangesAsync(ct);
+            }
+            yield return "Downloading 1%";
+        }
+    }
+
     /// <summary>
     /// A <see cref="VodDownloader"/> stub that always throws from <see cref="RunAsync"/>.
     /// </summary>
