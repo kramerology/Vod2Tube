@@ -163,8 +163,6 @@
     {
         if (_editingChannel == null) return;
 
-        _editingChannel.ChannelName = _editingChannel.ChannelName.Trim().ToLower();
-
         if (_editingChannel.Id == 0)
         {
             await ChannelService.AddNewChannelAsync(_editingChannel);

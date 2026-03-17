@@ -147,10 +147,11 @@ else
     private List<PipelineJobDto> _jobs = new();
     private bool _loading = true;
     private PeriodicTimer? _timer;
-    private CancellationTokenSource _cts = new();
+    private CancellationTokenSource? _cts;
 
     protected override async Task OnInitializedAsync()
     {
+        _cts = new CancellationTokenSource();
         await LoadJobsAsync();
         _ = StartPollingAsync();
     }
@@ -160,7 +161,7 @@ else
         _timer = new PeriodicTimer(TimeSpan.FromSeconds(3));
         try
         {
-            while (await _timer.WaitForNextTickAsync(_cts.Token))
+            while (await _timer.WaitForNextTickAsync(_cts!.Token))
             {
                 await LoadJobsAsync();
                 await InvokeAsync(StateHasChanged);
@@ -276,8 +277,11 @@ else
 
     public async ValueTask DisposeAsync()
     {
-        await _cts.CancelAsync();
+        if (_cts != null)
+        {
+            await _cts.CancelAsync();
+            _cts.Dispose();
+        }
         _timer?.Dispose();
-        _cts.Dispose();
     }
 }
