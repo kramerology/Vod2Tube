@@ -420,3 +420,8 @@ FodyWeavers.xsd
 # YouTube OAuth2 credentials and tokens
 YouTubeCredentials/
 Vod2Tube.db
+/Vod2Tube.Web/ChatRenderTemp/TwitchDownloader
+/Vod2Tube.Web/VodDownloads
+/Vod2Tube.Web/Vod2Tube.db-shm
+/Vod2Tube.Web/Vod2Tube.db-wal
+/Vod2Tube.Web/ChatRenders
