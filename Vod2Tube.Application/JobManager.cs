@@ -372,6 +372,8 @@ namespace Vod2Tube.Application
                                 logger.LogInformation("{Status}", status);
                             try { await dbContext.SaveChangesAsync(ct); }
                             catch (Exception ex) { logger.LogWarning(ex, "Failed to save progress for job {VodId}", job.VodId); }
+                            if (await DetectAndApplyPauseAsync(dbContext, job, logger, ct))
+                                return;
                         }
                     }
                     Console.WriteLine(); // end the in-place progress line
