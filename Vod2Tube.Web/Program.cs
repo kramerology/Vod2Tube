@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using MudBlazor.Services;
+using Vod2Tube.Application;
 using Vod2Tube.Application.Services;
 using Vod2Tube.Infrastructure;
 
@@ -16,6 +17,17 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 builder.Services.AddScoped<ChannelService>();
 builder.Services.AddScoped<PipelineService>();
+builder.Services.AddScoped<TwitchGraphQLService>();
+builder.Services.AddScoped<TwitchDownloadService>();
+builder.Services.AddScoped<ChatDownloader>();
+builder.Services.AddScoped<ChatRenderer>();
+builder.Services.AddScoped<FinalRenderer>();
+builder.Services.AddScoped<VideoUploader>();
+builder.Services.AddScoped<VodDownloader>();
+
+
+builder.Services.AddHostedService<VodPopulator>();
+builder.Services.AddHostedService<JobManager>();
 
 var app = builder.Build();
 
