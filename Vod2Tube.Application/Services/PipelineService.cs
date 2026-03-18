@@ -33,27 +33,34 @@ namespace Vod2Tube.Application.Services
         public async Task<List<PipelineJobDto>> GetActiveJobsAsync()
         {
             var pipelines = await _dbContext.Pipelines
+                .AsNoTracking()
                 .Where(p => ActiveStages.Contains(p.Stage) || (p.Failed && p.Stage != "Cancelled"))
-                .OrderBy(p => p.Stage)
                 .ToListAsync();
 
             var vodIds = pipelines.Select(p => p.VodId).ToList();
             var vods = await _dbContext.TwitchVods
+                .AsNoTracking()
                 .Where(v => vodIds.Contains(v.Id))
                 .ToDictionaryAsync(v => v.Id);
 
-            return pipelines.Select(p => MapToDto(p, vods.GetValueOrDefault(p.VodId))).ToList();
+            return pipelines
+                .OrderByDescending(p => Array.IndexOf(JobManager.StagePriority, p.Stage))
+                .ThenBy(p => p.VodId)
+                .Select(p => MapToDto(p, vods.GetValueOrDefault(p.VodId)))
+                .ToList();
         }
 
         public async Task<List<PipelineJobDto>> GetCompletedJobsAsync()
         {
             var pipelines = await _dbContext.Pipelines
+                .AsNoTracking()
                 .Where(p => p.Stage == "Uploaded" || p.Stage == "Cancelled")
                 .OrderByDescending(p => p.VodId)
                 .ToListAsync();
 
             var vodIds = pipelines.Select(p => p.VodId).ToList();
             var vods = await _dbContext.TwitchVods
+                .AsNoTracking()
                 .Where(v => vodIds.Contains(v.Id))
                 .ToDictionaryAsync(v => v.Id);
 
