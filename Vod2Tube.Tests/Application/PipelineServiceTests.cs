@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Core;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
@@ -41,7 +42,7 @@ public class PipelineServiceTests
     public async Task GetActiveJobsAsync_NoPipelines_ReturnsEmpty()
     {
         await using var ctx = CreateInMemoryContext(nameof(GetActiveJobsAsync_NoPipelines_ReturnsEmpty));
-        var svc = new PipelineService(ctx);
+        var svc = new PipelineService(ctx, NullLogger<PipelineService>.Instance);
 
         var result = await svc.GetActiveJobsAsync();
 
@@ -54,7 +55,7 @@ public class PipelineServiceTests
         await using var ctx = CreateInMemoryContext(nameof(GetActiveJobsAsync_PendingJob_IsIncluded));
         ctx.Pipelines.Add(MakePipeline("v1", "Pending"));
         await ctx.SaveChangesAsync();
-        var svc = new PipelineService(ctx);
+        var svc = new PipelineService(ctx, NullLogger<PipelineService>.Instance);
 
         var result = await svc.GetActiveJobsAsync();
 
@@ -75,7 +76,7 @@ public class PipelineServiceTests
         for (int i = 0; i < activeStages.Length; i++)
             ctx.Pipelines.Add(MakePipeline($"v{i}", activeStages[i]));
         await ctx.SaveChangesAsync();
-        var svc = new PipelineService(ctx);
+        var svc = new PipelineService(ctx, NullLogger<PipelineService>.Instance);
 
         var result = await svc.GetActiveJobsAsync();
 
@@ -88,7 +89,7 @@ public class PipelineServiceTests
         await using var ctx = CreateInMemoryContext(nameof(GetActiveJobsAsync_UploadedJob_IsNotIncluded));
         ctx.Pipelines.Add(MakePipeline("v1", "Uploaded"));
         await ctx.SaveChangesAsync();
-        var svc = new PipelineService(ctx);
+        var svc = new PipelineService(ctx, NullLogger<PipelineService>.Instance);
 
         var result = await svc.GetActiveJobsAsync();
 
@@ -101,7 +102,7 @@ public class PipelineServiceTests
         await using var ctx = CreateInMemoryContext(nameof(GetActiveJobsAsync_CancelledJob_IsNotIncluded));
         ctx.Pipelines.Add(MakePipeline("v1", "Cancelled"));
         await ctx.SaveChangesAsync();
-        var svc = new PipelineService(ctx);
+        var svc = new PipelineService(ctx, NullLogger<PipelineService>.Instance);
 
         var result = await svc.GetActiveJobsAsync();
 
@@ -114,7 +115,7 @@ public class PipelineServiceTests
         await using var ctx = CreateInMemoryContext(nameof(GetActiveJobsAsync_FailedJobWithActiveStage_IsIncluded));
         ctx.Pipelines.Add(MakePipeline("v1", "DownloadingVod", failed: true));
         await ctx.SaveChangesAsync();
-        var svc = new PipelineService(ctx);
+        var svc = new PipelineService(ctx, NullLogger<PipelineService>.Instance);
 
         var result = await svc.GetActiveJobsAsync();
 
@@ -129,7 +130,7 @@ public class PipelineServiceTests
         // A job that was both Failed and Cancelled should appear in Completed, not Active.
         ctx.Pipelines.Add(MakePipeline("v1", "Cancelled", failed: true));
         await ctx.SaveChangesAsync();
-        var svc = new PipelineService(ctx);
+        var svc = new PipelineService(ctx, NullLogger<PipelineService>.Instance);
 
         var result = await svc.GetActiveJobsAsync();
 
@@ -143,7 +144,7 @@ public class PipelineServiceTests
         ctx.TwitchVods.Add(MakeVod("v1", title: "Great Stream"));
         ctx.Pipelines.Add(MakePipeline("v1", "Pending"));
         await ctx.SaveChangesAsync();
-        var svc = new PipelineService(ctx);
+        var svc = new PipelineService(ctx, NullLogger<PipelineService>.Instance);
 
         var result = await svc.GetActiveJobsAsync();
 
@@ -157,7 +158,7 @@ public class PipelineServiceTests
         await using var ctx = CreateInMemoryContext(nameof(GetActiveJobsAsync_FallsBackToVodId_WhenVodMissing));
         ctx.Pipelines.Add(MakePipeline("orphan1", "Pending"));
         await ctx.SaveChangesAsync();
-        var svc = new PipelineService(ctx);
+        var svc = new PipelineService(ctx, NullLogger<PipelineService>.Instance);
 
         var result = await svc.GetActiveJobsAsync();
 
@@ -172,7 +173,7 @@ public class PipelineServiceTests
         ctx.Pipelines.Add(MakePipeline("low",  "Pending"));
         ctx.Pipelines.Add(MakePipeline("high", "Uploading"));
         await ctx.SaveChangesAsync();
-        var svc = new PipelineService(ctx);
+        var svc = new PipelineService(ctx, NullLogger<PipelineService>.Instance);
 
         var result = await svc.GetActiveJobsAsync();
 
@@ -188,7 +189,7 @@ public class PipelineServiceTests
     public async Task GetCompletedJobsAsync_NoPipelines_ReturnsEmpty()
     {
         await using var ctx = CreateInMemoryContext(nameof(GetCompletedJobsAsync_NoPipelines_ReturnsEmpty));
-        var svc = new PipelineService(ctx);
+        var svc = new PipelineService(ctx, NullLogger<PipelineService>.Instance);
 
         var result = await svc.GetCompletedJobsAsync();
 
@@ -201,7 +202,7 @@ public class PipelineServiceTests
         await using var ctx = CreateInMemoryContext(nameof(GetCompletedJobsAsync_UploadedJob_IsIncluded));
         ctx.Pipelines.Add(MakePipeline("v1", "Uploaded"));
         await ctx.SaveChangesAsync();
-        var svc = new PipelineService(ctx);
+        var svc = new PipelineService(ctx, NullLogger<PipelineService>.Instance);
 
         var result = await svc.GetCompletedJobsAsync();
 
@@ -215,7 +216,7 @@ public class PipelineServiceTests
         await using var ctx = CreateInMemoryContext(nameof(GetCompletedJobsAsync_CancelledJob_IsIncluded));
         ctx.Pipelines.Add(MakePipeline("v1", "Cancelled"));
         await ctx.SaveChangesAsync();
-        var svc = new PipelineService(ctx);
+        var svc = new PipelineService(ctx, NullLogger<PipelineService>.Instance);
 
         var result = await svc.GetCompletedJobsAsync();
 
@@ -230,7 +231,7 @@ public class PipelineServiceTests
         ctx.Pipelines.Add(MakePipeline("v1", "Pending"));
         ctx.Pipelines.Add(MakePipeline("v2", "Uploading"));
         await ctx.SaveChangesAsync();
-        var svc = new PipelineService(ctx);
+        var svc = new PipelineService(ctx, NullLogger<PipelineService>.Instance);
 
         var result = await svc.GetCompletedJobsAsync();
 
@@ -244,7 +245,7 @@ public class PipelineServiceTests
         ctx.TwitchVods.Add(MakeVod("v1", title: "Old Vod", channel: "streamer"));
         ctx.Pipelines.Add(MakePipeline("v1", "Uploaded"));
         await ctx.SaveChangesAsync();
-        var svc = new PipelineService(ctx);
+        var svc = new PipelineService(ctx, NullLogger<PipelineService>.Instance);
 
         var result = await svc.GetCompletedJobsAsync();
 
@@ -262,7 +263,7 @@ public class PipelineServiceTests
         await using var ctx = CreateInMemoryContext(nameof(PauseJobAsync_ExistingJob_SetsPausedTrue));
         ctx.Pipelines.Add(MakePipeline("v1", "DownloadingVod", paused: false));
         await ctx.SaveChangesAsync();
-        var svc = new PipelineService(ctx);
+        var svc = new PipelineService(ctx, NullLogger<PipelineService>.Instance);
 
         var result = await svc.PauseJobAsync("v1");
 
@@ -275,7 +276,7 @@ public class PipelineServiceTests
     public async Task PauseJobAsync_MissingJob_ReturnsFalse()
     {
         await using var ctx = CreateInMemoryContext(nameof(PauseJobAsync_MissingJob_ReturnsFalse));
-        var svc = new PipelineService(ctx);
+        var svc = new PipelineService(ctx, NullLogger<PipelineService>.Instance);
 
         var result = await svc.PauseJobAsync("nonexistent");
 
@@ -292,7 +293,7 @@ public class PipelineServiceTests
         await using var ctx = CreateInMemoryContext(nameof(ResumeJobAsync_ExistingJob_SetsPausedFalse));
         ctx.Pipelines.Add(MakePipeline("v1", "DownloadingVod", paused: true));
         await ctx.SaveChangesAsync();
-        var svc = new PipelineService(ctx);
+        var svc = new PipelineService(ctx, NullLogger<PipelineService>.Instance);
 
         var result = await svc.ResumeJobAsync("v1");
 
@@ -305,7 +306,7 @@ public class PipelineServiceTests
     public async Task ResumeJobAsync_MissingJob_ReturnsFalse()
     {
         await using var ctx = CreateInMemoryContext(nameof(ResumeJobAsync_MissingJob_ReturnsFalse));
-        var svc = new PipelineService(ctx);
+        var svc = new PipelineService(ctx, NullLogger<PipelineService>.Instance);
 
         var result = await svc.ResumeJobAsync("nonexistent");
 
@@ -322,7 +323,7 @@ public class PipelineServiceTests
         await using var ctx = CreateInMemoryContext(nameof(CancelJobAsync_ExistingJob_SetsStageAndClearsPause));
         ctx.Pipelines.Add(MakePipeline("v1", "Combining", paused: true));
         await ctx.SaveChangesAsync();
-        var svc = new PipelineService(ctx);
+        var svc = new PipelineService(ctx, NullLogger<PipelineService>.Instance);
 
         var result = await svc.CancelJobAsync("v1");
 
@@ -336,7 +337,7 @@ public class PipelineServiceTests
     public async Task CancelJobAsync_MissingJob_ReturnsFalse()
     {
         await using var ctx = CreateInMemoryContext(nameof(CancelJobAsync_MissingJob_ReturnsFalse));
-        var svc = new PipelineService(ctx);
+        var svc = new PipelineService(ctx, NullLogger<PipelineService>.Instance);
 
         var result = await svc.CancelJobAsync("nonexistent");
 
@@ -349,7 +350,7 @@ public class PipelineServiceTests
         await using var ctx = CreateInMemoryContext(nameof(CancelJobAsync_CancelledJob_MovesToCompletedNotActive));
         ctx.Pipelines.Add(MakePipeline("v1", "Pending"));
         await ctx.SaveChangesAsync();
-        var svc = new PipelineService(ctx);
+        var svc = new PipelineService(ctx, NullLogger<PipelineService>.Instance);
 
         await svc.CancelJobAsync("v1");
 
@@ -379,7 +380,7 @@ public class PipelineServiceTests
             Paused = true
         });
         await ctx.SaveChangesAsync();
-        var svc = new PipelineService(ctx);
+        var svc = new PipelineService(ctx, NullLogger<PipelineService>.Instance);
 
         var result = await svc.RetryJobAsync("v1");
 
@@ -406,7 +407,7 @@ public class PipelineServiceTests
             ResumableUploadUri = "https://upload.example.com/session/abc"
         });
         await ctx.SaveChangesAsync();
-        var svc = new PipelineService(ctx);
+        var svc = new PipelineService(ctx, NullLogger<PipelineService>.Instance);
 
         await svc.RetryJobAsync("v1");
 
@@ -419,7 +420,7 @@ public class PipelineServiceTests
     public async Task RetryJobAsync_MissingJob_ReturnsFalse()
     {
         await using var ctx = CreateInMemoryContext(nameof(RetryJobAsync_MissingJob_ReturnsFalse));
-        var svc = new PipelineService(ctx);
+        var svc = new PipelineService(ctx, NullLogger<PipelineService>.Instance);
 
         var result = await svc.RetryJobAsync("nonexistent");
 
@@ -439,7 +440,7 @@ public class PipelineServiceTests
             FailReason = "Transient error"
         });
         await ctx.SaveChangesAsync();
-        var svc = new PipelineService(ctx);
+        var svc = new PipelineService(ctx, NullLogger<PipelineService>.Instance);
 
         await svc.RetryJobAsync("v1");
 
