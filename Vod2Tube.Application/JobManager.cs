@@ -91,6 +91,9 @@ namespace Vod2Tube.Application
         {
             return await dbContext.Pipelines
                 .Where(p => StagePriority.Contains(p.Stage) && !p.Failed && !p.Paused)
+                .Where(p => !dbContext.TwitchVods
+                    .Where(v => v.Id == p.VodId)
+                    .Any(v => dbContext.Channels.Any(c => c.ChannelName == v.ChannelName && !c.Active)))
                 .OrderByDescending(p =>
                     p.Stage == "Uploading"            ? 9 :
                     p.Stage == "PendingUpload"        ? 8 :
@@ -141,6 +144,32 @@ namespace Vod2Tube.Application
         }
 
         /// <summary>
+        /// Returns true if the channel associated with the VOD is active (not paused).
+        /// Returns true when the VOD or channel record cannot be found so that processing
+        /// is not blocked by missing metadata.
+        /// Uses AsNoTracking so it does not overwrite any pending entity changes.
+        /// </summary>
+        internal static async Task<bool> IsChannelActiveAsync(AppDbContext dbContext, string vodId, CancellationToken ct)
+        {
+            var channelName = await dbContext.TwitchVods
+                .AsNoTracking()
+                .Where(v => v.Id == vodId)
+                .Select(v => v.ChannelName)
+                .FirstOrDefaultAsync(ct);
+
+            if (channelName == null)
+                return true;
+
+            var active = await dbContext.Channels
+                .AsNoTracking()
+                .Where(c => c.ChannelName == channelName)
+                .Select(c => (bool?)c.Active)
+                .FirstOrDefaultAsync(ct);
+
+            return active ?? true;
+        }
+
+        /// <summary>
         /// Checks whether the job has been paused externally.  If so, sets <see cref="Pipeline.Paused"/>
         /// on the in-memory entity, logs the event, and returns <c>true</c> so the caller can
         /// immediately return and stop further processing.
@@ -171,6 +200,23 @@ namespace Vod2Tube.Application
             return false;
         }
 
+        /// <summary>
+        /// Checks whether the channel associated with the job has been paused (set to inactive).
+        /// If so, logs the event and returns <c>true</c> so the caller can immediately return and
+        /// stop further processing. The job's own <see cref="Pipeline.Paused"/> flag is not set
+        /// because the job itself has not been paused — only its channel; it will be picked up
+        /// again automatically once the channel is reactivated.
+        /// </summary>
+        private static async Task<bool> DetectAndApplyChannelPauseAsync(AppDbContext dbContext, Pipeline job, ILogger logger, CancellationToken ct)
+        {
+            if (!await IsChannelActiveAsync(dbContext, job.VodId, ct))
+            {
+                logger.LogInformation("Channel for job {VodId} is paused; stopping processing at stage {Stage}", job.VodId, job.Stage);
+                return true;
+            }
+            return false;
+        }
+
         internal static async Task ProcessJobToCompletionAsync(Pipeline job, AppDbContext dbContext, IServiceProvider services, ILogger logger, CancellationToken ct)
         {
             var vodDownloader  = services.GetRequiredService<VodDownloader>();
@@ -183,8 +229,10 @@ namespace Vod2Tube.Application
 
             try
             {
-                // Guard against cancellation that arrived after the job was picked up.
+                // Guard against cancellation or channel pause that arrived after the job was picked up.
                 if (await DetectAndApplyCancelAsync(dbContext, job, logger, ct))
+                    return;
+                if (await DetectAndApplyChannelPauseAsync(dbContext, job, logger, ct))
                     return;
 
                 if (job.Stage == "Pending" || job.Stage == "DownloadingVod")
@@ -223,6 +271,8 @@ namespace Vod2Tube.Application
                                 if (await DetectAndApplyPauseAsync(dbContext, job, logger, ct))
                                     return;
                                 if (await DetectAndApplyCancelAsync(dbContext, job, logger, ct))
+                                    return;
+                                if (await DetectAndApplyChannelPauseAsync(dbContext, job, logger, ct))
                                     return;
                             }
                         }
@@ -265,6 +315,8 @@ namespace Vod2Tube.Application
                                 if (await DetectAndApplyPauseAsync(dbContext, job, logger, ct))
                                     return;
                                 if (await DetectAndApplyCancelAsync(dbContext, job, logger, ct))
+                                    return;
+                                if (await DetectAndApplyChannelPauseAsync(dbContext, job, logger, ct))
                                     return;
                             }
                         }
@@ -322,6 +374,8 @@ namespace Vod2Tube.Application
                                     return;
                                 if (await DetectAndApplyCancelAsync(dbContext, job, logger, ct))
                                     return;
+                                if (await DetectAndApplyChannelPauseAsync(dbContext, job, logger, ct))
+                                    return;
                             }
                         }
                         Console.WriteLine(); // end the in-place progress line
@@ -378,6 +432,8 @@ namespace Vod2Tube.Application
                                     return;
                                 if (await DetectAndApplyCancelAsync(dbContext, job, logger, ct))
                                     return;
+                                if (await DetectAndApplyChannelPauseAsync(dbContext, job, logger, ct))
+                                    return;
                             }
                         }
                         Console.WriteLine(); // end the in-place progress line
@@ -414,8 +470,10 @@ namespace Vod2Tube.Application
                             catch (Exception ex) { logger.LogWarning(ex, "Failed to save progress for job {VodId}", job.VodId); }
                         }
                     }
-                    // After upload completes, check pause and cancellation before advancing stage.
+                    // After upload completes, check pause, channel pause, and cancellation before advancing stage.
                     if (await DetectAndApplyPauseAsync(dbContext, job, logger, ct))
+                        return;
+                    if (await DetectAndApplyChannelPauseAsync(dbContext, job, logger, ct))
                         return;
                     if (await DetectAndApplyCancelAsync(dbContext, job, logger, ct))
                         return;
