@@ -128,6 +128,19 @@ namespace Vod2Tube.Application
         }
 
         /// <summary>
+        /// Returns true if the job's Stage has been set to "Cancelled" in the database.
+        /// Uses AsNoTracking so it does not overwrite any pending entity changes.
+        /// </summary>
+        internal static async Task<bool> IsJobCancelledAsync(AppDbContext dbContext, string vodId, CancellationToken ct)
+        {
+            return await dbContext.Pipelines
+                .AsNoTracking()
+                .Where(p => p.VodId == vodId)
+                .Select(p => p.Stage)
+                .FirstOrDefaultAsync(ct) == "Cancelled";
+        }
+
+        /// <summary>
         /// Checks whether the job has been paused externally.  If so, sets <see cref="Pipeline.Paused"/>
         /// on the in-memory entity, logs the event, and returns <c>true</c> so the caller can
         /// immediately return and stop further processing.
@@ -138,6 +151,21 @@ namespace Vod2Tube.Application
             {
                 job.Paused = true;
                 logger.LogInformation("Job {VodId} paused at stage {Stage}", job.VodId, job.Stage);
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Checks whether the job has been cancelled externally (Stage set to "Cancelled" in the
+        /// database).  If so, logs the event and returns <c>true</c> so the caller can immediately
+        /// return and stop further processing. The Stage is already "Cancelled" in the database.
+        /// </summary>
+        private static async Task<bool> DetectAndApplyCancelAsync(AppDbContext dbContext, Pipeline job, ILogger logger, CancellationToken ct)
+        {
+            if (await IsJobCancelledAsync(dbContext, job.VodId, ct))
+            {
+                logger.LogInformation("Job {VodId} cancelled at stage {Stage}", job.VodId, job.Stage);
                 return true;
             }
             return false;
@@ -155,6 +183,10 @@ namespace Vod2Tube.Application
 
             try
             {
+                // Guard against cancellation that arrived after the job was picked up.
+                if (await DetectAndApplyCancelAsync(dbContext, job, logger, ct))
+                    return;
+
                 if (job.Stage == "Pending" || job.Stage == "DownloadingVod")
                 {
                     await SetStageAsync(dbContext, job, "DownloadingVod", ct);
@@ -189,6 +221,8 @@ namespace Vod2Tube.Application
                                     logger.LogWarning(ex, "Failed to save progress for job {VodId}", job.VodId);
                                 }
                                 if (await DetectAndApplyPauseAsync(dbContext, job, logger, ct))
+                                    return;
+                                if (await DetectAndApplyCancelAsync(dbContext, job, logger, ct))
                                     return;
                             }
                         }
@@ -229,6 +263,8 @@ namespace Vod2Tube.Application
                                 try { await dbContext.SaveChangesAsync(ct); }
                                 catch (Exception ex) { logger.LogWarning(ex, "Failed to save progress for job {VodId}", job.VodId); }
                                 if (await DetectAndApplyPauseAsync(dbContext, job, logger, ct))
+                                    return;
+                                if (await DetectAndApplyCancelAsync(dbContext, job, logger, ct))
                                     return;
                             }
                         }
@@ -284,6 +320,8 @@ namespace Vod2Tube.Application
                                 catch (Exception ex) { logger.LogWarning(ex, "Failed to save progress for job {VodId}", job.VodId); }
                                 if (await DetectAndApplyPauseAsync(dbContext, job, logger, ct))
                                     return;
+                                if (await DetectAndApplyCancelAsync(dbContext, job, logger, ct))
+                                    return;
                             }
                         }
                         Console.WriteLine(); // end the in-place progress line
@@ -338,6 +376,8 @@ namespace Vod2Tube.Application
                                 catch (Exception ex) { logger.LogWarning(ex, "Failed to save progress for job {VodId}", job.VodId); }
                                 if (await DetectAndApplyPauseAsync(dbContext, job, logger, ct))
                                     return;
+                                if (await DetectAndApplyCancelAsync(dbContext, job, logger, ct))
+                                    return;
                             }
                         }
                         Console.WriteLine(); // end the in-place progress line
@@ -374,8 +414,10 @@ namespace Vod2Tube.Application
                             catch (Exception ex) { logger.LogWarning(ex, "Failed to save progress for job {VodId}", job.VodId); }
                         }
                     }
-                    // After upload completes, allow pause to be applied safely before advancing stage.
+                    // After upload completes, check pause and cancellation before advancing stage.
                     if (await DetectAndApplyPauseAsync(dbContext, job, logger, ct))
+                        return;
+                    if (await DetectAndApplyCancelAsync(dbContext, job, logger, ct))
                         return;
                     Console.WriteLine(); // end the in-place progress line
                     await SetStageAsync(dbContext, job, "Uploaded", ct);

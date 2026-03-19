@@ -657,4 +657,104 @@ public class JobManagerTests
             yield return "Stub upload complete";
         }
     }
+
+    // =========================================================================
+    // Cancellation support
+    // =========================================================================
+
+    [Test]
+    public async Task IsJobCancelledAsync_ReturnsTrueWhenStageIsCancelled()
+    {
+        await using var ctx = CreateInMemoryContext(nameof(IsJobCancelledAsync_ReturnsTrueWhenStageIsCancelled));
+        ctx.Pipelines.Add(new Pipeline { VodId = "v1", Stage = "Cancelled" });
+        await ctx.SaveChangesAsync();
+
+        bool result = await JobManager.IsJobCancelledAsync(ctx, "v1", CancellationToken.None);
+
+        await Assert.That(result).IsEqualTo(true);
+    }
+
+    [Test]
+    public async Task IsJobCancelledAsync_ReturnsFalseWhenStageIsNotCancelled()
+    {
+        await using var ctx = CreateInMemoryContext(nameof(IsJobCancelledAsync_ReturnsFalseWhenStageIsNotCancelled));
+        ctx.Pipelines.Add(new Pipeline { VodId = "v1", Stage = "Pending" });
+        await ctx.SaveChangesAsync();
+
+        bool result = await JobManager.IsJobCancelledAsync(ctx, "v1", CancellationToken.None);
+
+        await Assert.That(result).IsEqualTo(false);
+    }
+
+    [Test]
+    public async Task FindHighestPriorityJob_CancelledJobIsIgnored()
+    {
+        await using var ctx = CreateInMemoryContext(nameof(FindHighestPriorityJob_CancelledJobIsIgnored));
+        ctx.Pipelines.Add(new Pipeline { VodId = "cancelled", Stage = "Cancelled" });
+        ctx.Pipelines.Add(new Pipeline { VodId = "active",    Stage = "Pending" });
+        await ctx.SaveChangesAsync();
+
+        var result = await JobManager.FindHighestPriorityJobAsync(ctx, CancellationToken.None);
+
+        await Assert.That(result!.VodId).IsEqualTo("active");
+    }
+
+    [Test]
+    public async Task ProcessJob_CancelledBeforeStart_ReturnEarlyAndStageRemainsAsSet()
+    {
+        await using var ctx = CreateInMemoryContext(nameof(ProcessJob_CancelledBeforeStart_ReturnEarlyAndStageRemainsAsSet));
+        var job = new Pipeline { VodId = "v1", Stage = "Cancelled" };
+        ctx.Pipelines.Add(job);
+        await ctx.SaveChangesAsync();
+
+        await JobManager.ProcessJobToCompletionAsync(job, ctx, CreateWorkerProvider(), NullLogger.Instance, CancellationToken.None);
+
+        // Job should not have been transitioned to a processing stage.
+        await Assert.That(job.Stage).IsEqualTo("Cancelled");
+    }
+
+    [Test]
+    public async Task ProcessJob_CancelledDuringDownloadingVod_ReturnEarlyAndJobNotFailed()
+    {
+        await using var ctx = CreateInMemoryContext(nameof(ProcessJob_CancelledDuringDownloadingVod_ReturnEarlyAndJobNotFailed));
+        var job = new Pipeline { VodId = "v1", Stage = "Pending" };
+        ctx.Pipelines.Add(job);
+        await ctx.SaveChangesAsync();
+
+        // The stub downloader marks the job as cancelled in the DB on its first yield.
+        var downloader = new CancellingVodDownloader(ctx);
+
+        await JobManager.ProcessJobToCompletionAsync(job, ctx, CreateWorkerProvider(downloader), NullLogger.Instance, CancellationToken.None);
+
+        // Processing should have stopped: job is Cancelled (not uploaded) and not marked as failed.
+        await Assert.That(job.Stage).IsEqualTo("Cancelled");
+        await Assert.That(job.Failed).IsEqualTo(false);
+    }
+
+    /// <summary>
+    /// A <see cref="VodDownloader"/> stub that marks the job as cancelled in the database on its
+    /// first status yield, simulating a cancel request that arrives during processing.
+    /// </summary>
+    private sealed class CancellingVodDownloader : VodDownloader
+    {
+        private readonly AppDbContext _ctx;
+
+        public CancellingVodDownloader(AppDbContext ctx) : base(null!)
+        {
+            _ctx = ctx;
+        }
+
+        public override async IAsyncEnumerable<string> RunAsync(string vodId,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
+        {
+            // Simulate an external cancellation being written to the database before the first progress update.
+            var pipeline = await _ctx.Pipelines.FindAsync(new object[] { vodId }, ct);
+            if (pipeline != null)
+            {
+                pipeline.Stage = "Cancelled";
+                await _ctx.SaveChangesAsync(ct);
+            }
+            yield return "Downloading 1%";
+        }
+    }
 }
