@@ -105,6 +105,9 @@ namespace Vod2Tube.Application.Services
             job.Description = string.Empty;
             job.Stage = "Pending";
             job.Paused = false;
+            // Reset upload-related state so that a retry starts a fresh upload.
+            job.YoutubeVideoId = string.Empty;
+            job.ResumableUploadUri = null;
             await _dbContext.SaveChangesAsync();
             return true;
         }
