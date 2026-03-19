@@ -1,0 +1,60 @@
+@inherits LayoutComponentBase
+
+<MudThemeProvider Theme="_theme" IsDarkMode="_isDarkMode" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudLayout>
+    <MudAppBar Elevation="1" Color="Color.Dark">
+        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start"
+            OnClick="@ToggleDrawer" />
+        <MudText Typo="Typo.h6" Class="ml-2">
+            <MudIcon Icon="@Icons.Material.Filled.VideoLibrary" Class="mr-1" Style="vertical-align:middle" />
+            Vod2Tube
+        </MudText>
+        <MudSpacer />
+        <MudTooltip Text="@(_isDarkMode ? "Switch to light mode" : "Switch to dark mode")">
+            <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)"
+                Color="Color.Inherit" OnClick="@ToggleDarkMode" />
+        </MudTooltip>
+    </MudAppBar>
+
+    <MudDrawer @bind-Open="_drawerOpen" Elevation="2" Variant="DrawerVariant.Responsive" ClipMode="DrawerClipMode.Always">
+        <NavMenu />
+    </MudDrawer>
+
+    <MudMainContent>
+        <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="pt-4 pb-8">
+            @Body
+        </MudContainer>
+    </MudMainContent>
+</MudLayout>
+
+@code {
+    private bool _drawerOpen = true;
+    private bool _isDarkMode = true;
+
+    private MudTheme _theme = new MudTheme
+    {
+        PaletteLight = new PaletteLight
+        {
+            Primary = "#7C4DFF",
+            Secondary = "#651FFF",
+            AppbarBackground = "#1a1a2e",
+            Background = "#f5f5f5",
+        },
+        PaletteDark = new PaletteDark
+        {
+            Primary = "#7C4DFF",
+            Secondary = "#651FFF",
+            AppbarBackground = "#0d0d1a",
+            Background = "#0d0d1a",
+            Surface = "#16213e",
+            DrawerBackground = "#0f3460",
+        }
+    };
+
+    private void ToggleDrawer() => _drawerOpen = !_drawerOpen;
+    private void ToggleDarkMode() => _isDarkMode = !_isDarkMode;
+}

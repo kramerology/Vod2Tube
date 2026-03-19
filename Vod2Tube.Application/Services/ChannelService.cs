@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Vod2Tube.Domain;
 using Vod2Tube.Infrastructure;
 
@@ -12,8 +13,14 @@ namespace Vod2Tube.Application.Services
             _dbContext = dbContext;
         }
 
+        public async Task<List<Channel>> GetAllChannelsAsync()
+        {
+            return await _dbContext.Channels.OrderBy(c => c.ChannelName).ToListAsync();
+        }
+
         public async Task<Channel> AddNewChannelAsync(Channel channel)
         {
+            channel.ChannelName = channel.ChannelName.Trim().ToLowerInvariant();
             channel.AddedAtUTC = DateTime.UtcNow;
             _dbContext.Channels.Add(channel);
             await _dbContext.SaveChangesAsync();
@@ -31,7 +38,7 @@ namespace Vod2Tube.Application.Services
             if (existing == null)
                 return false;
 
-            existing.ChannelName = channel.ChannelName;
+            existing.ChannelName = channel.ChannelName.Trim().ToLowerInvariant();
             existing.Active = channel.Active;
 
             await _dbContext.SaveChangesAsync();
