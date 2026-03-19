@@ -289,16 +289,6 @@ else
 
     public async ValueTask DisposeAsync()
     {
-        if (_cts != null)
-        {
-            await _cts.CancelAsync();
-            _cts.Dispose();
-        }
-        _timer?.Dispose();
-    }
-
-    public async ValueTask DisposeAsync()
-    {
         try
         {
             _cts?.Cancel();
