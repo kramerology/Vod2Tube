@@ -148,12 +148,13 @@ else
     private bool _loading = true;
     private PeriodicTimer? _timer;
     private CancellationTokenSource? _cts;
+    private Task? _pollingTask;
 
     protected override async Task OnInitializedAsync()
     {
         _cts = new CancellationTokenSource();
         await LoadJobsAsync();
-        _ = StartPollingAsync();
+        _pollingTask = StartPollingAsync();
     }
 
     private async Task StartPollingAsync()
@@ -167,7 +168,18 @@ else
                 await InvokeAsync(StateHasChanged);
             }
         }
-        catch (OperationCanceledException) { }
+        catch (OperationCanceledException)
+        {
+            // Expected during component disposal or cancellation.
+        }
+        catch (Exception)
+        {
+            // Unexpected error: stop polling and inform the user.
+            await InvokeAsync(() =>
+            {
+                Snackbar.Add("An error occurred while auto-refreshing jobs. Auto-refresh has been stopped.", Severity.Error);
+            });
+        }
     }
 
     private async Task LoadJobsAsync()
@@ -283,5 +295,31 @@ else
             _cts.Dispose();
         }
         _timer?.Dispose();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            _cts?.Cancel();
+
+            if (_pollingTask is not null)
+            {
+                try
+                {
+                    await _pollingTask;
+                }
+                catch (OperationCanceledException)
+                {
+                    // Swallow cancellation during dispose.
+                }
+                // Any other exceptions should already be handled inside StartPollingAsync.
+            }
+        }
+        finally
+        {
+            _timer?.Dispose();
+            _cts?.Dispose();
+        }
     }
 }
