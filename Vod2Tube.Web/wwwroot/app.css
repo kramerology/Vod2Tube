@@ -8,6 +8,11 @@ html, body {
     animation: pulse-border 2s infinite;
 }
 
+.job-row-active {
+    border-left: 3px solid var(--mud-palette-primary);
+    animation: pulse-border 2s infinite;
+}
+
 @keyframes pulse-border {
     0%, 100% { border-left-color: var(--mud-palette-primary); }
     50% { border-left-color: var(--mud-palette-primary-lighten); }
