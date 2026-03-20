@@ -7,8 +7,7 @@ using Vod2Tube.Infrastructure;
 
 AppDomain.CurrentDomain.UnhandledException += (sender, args) =>
 {
-    var ex = args.ExceptionObject as Exception;
-    Console.Error.WriteLine($"[FATAL] Unhandled exception: {ex}");
+    Console.Error.WriteLine($"[FATAL] Unhandled exception: {args.ExceptionObject}");
 };
 
 TaskScheduler.UnobservedTaskException += (sender, args) =>

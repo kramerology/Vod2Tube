@@ -129,6 +129,10 @@ namespace Vod2Tube.Application.Services
             }
             job.Stage = "Cancelled";
             job.Paused = false;
+            job.Failed = false;
+            job.FailCount = 0;
+            job.FailReason = string.Empty;
+            job.Description = string.Empty;
             await _dbContext.SaveChangesAsync();
             _logger.LogInformation("Cancelled VOD {VodId}", vodId);
             return true;

@@ -324,6 +324,7 @@
 
     private static Color GetStageColor(PipelineJobDto job)
     {
+        if (job.Stage == "Cancelled") return Color.Default;
         if (job.Failed) return Color.Error;
         if (job.Paused) return Color.Warning;
         return job.Stage switch
@@ -346,6 +347,7 @@
 
     private static string GetStageIcon(PipelineJobDto job)
     {
+        if (job.Stage == "Cancelled") return Icons.Material.Filled.Cancel;
         if (job.Failed) return Icons.Material.Filled.Error;
         if (job.Paused) return Icons.Material.Filled.Pause;
         return job.Stage switch
@@ -365,6 +367,7 @@
 
     private static string GetStageLabel(PipelineJobDto job)
     {
+        if (job.Stage == "Cancelled") return "Cancelled";
         if (job.Failed) return "Failed";
         return job.Stage switch
         {
