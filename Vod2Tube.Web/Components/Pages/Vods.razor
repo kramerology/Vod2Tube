@@ -272,7 +272,7 @@
         !job.Failed && PendingStages.Contains(job.Stage);
 
     private static bool IsCompletedJob(PipelineJobDto job) =>
-        CompletedStages.Contains(job.Stage) && !job.Failed;
+        CompletedStages.Contains(job.Stage);
 
     // ── Actions ──
 
