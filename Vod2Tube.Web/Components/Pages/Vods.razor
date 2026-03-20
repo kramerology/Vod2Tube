@@ -43,6 +43,11 @@
             Style="cursor:pointer">
             Completed (@_allJobs.Count(IsCompletedJob))
         </MudChip>
+        <MudChip T="string" Color="Color.Error" Size="Size.Small" Variant="@(_showFailed ? Variant.Filled : Variant.Outlined)"
+            OnClick="@(() => ToggleCategory("Failed"))" Icon="@Icons.Material.Filled.Error"
+            Style="cursor:pointer">
+            Failed (@_allJobs.Count(IsFailedJob))
+        </MudChip>
     </MudStack>
 </MudPaper>
 
@@ -183,12 +188,14 @@
     private bool _showActive = true;
     private bool _showPending = true;
     private bool _showCompleted = false;
+    private bool _showFailed = true;
 
     private IEnumerable<PipelineJobDto> FilteredJobs =>
         _allJobs.Where(j =>
             (_showActive && IsActiveJob(j)) ||
             (_showPending && IsPendingJob(j)) ||
-            (_showCompleted && IsCompletedJob(j)));
+            (_showCompleted && IsCompletedJob(j)) ||
+            (_showFailed && IsFailedJob(j)));
 
     protected override async Task OnInitializedAsync()
     {
@@ -245,6 +252,10 @@
                 _showCompleted = !_showCompleted;
                 Logger.LogInformation("Completed filter toggled to {State}", _showCompleted);
                 break;
+            case "Failed":
+                _showFailed = !_showFailed;
+                Logger.LogInformation("Failed filter toggled to {State}", _showFailed);
+                break;
         }
     }
 
@@ -266,13 +277,16 @@
     };
 
     private static bool IsActiveJob(PipelineJobDto job) =>
-        ActiveStages.Contains(job.Stage) || (job.Failed && !CompletedStages.Contains(job.Stage));
+        !job.Failed && ActiveStages.Contains(job.Stage);
 
     private static bool IsPendingJob(PipelineJobDto job) =>
         !job.Failed && PendingStages.Contains(job.Stage);
 
     private static bool IsCompletedJob(PipelineJobDto job) =>
         CompletedStages.Contains(job.Stage);
+
+    private static bool IsFailedJob(PipelineJobDto job) =>
+        job.Failed && !CompletedStages.Contains(job.Stage);
 
     // ── Actions ──
 
