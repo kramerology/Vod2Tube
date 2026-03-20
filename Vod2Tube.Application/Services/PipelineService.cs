@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Vod2Tube.Application.Models;
 using Vod2Tube.Infrastructure;
 using DomainTwitchVod = Vod2Tube.Domain.TwitchVod;
@@ -9,6 +10,7 @@ namespace Vod2Tube.Application.Services
     public class PipelineService
     {
         private readonly AppDbContext _dbContext;
+        private readonly ILogger<PipelineService> _logger;
 
         // Stages that represent an active (in-progress or queued) job
         private static readonly HashSet<string> ActiveStages = new(StringComparer.OrdinalIgnoreCase)
@@ -25,9 +27,10 @@ namespace Vod2Tube.Application.Services
             "Uploading"
         };
 
-        public PipelineService(AppDbContext dbContext)
+        public PipelineService(AppDbContext dbContext, ILogger<PipelineService> logger)
         {
             _dbContext = dbContext;
+            _logger = logger;
         }
 
         public async Task<List<PipelineJobDto>> GetActiveJobsAsync()
@@ -67,38 +70,82 @@ namespace Vod2Tube.Application.Services
             return pipelines.Select(p => MapToDto(p, vods.GetValueOrDefault(p.VodId))).ToList();
         }
 
+        public async Task<List<PipelineJobDto>> GetAllJobsAsync()
+        {
+            var pipelines = await _dbContext.Pipelines
+                .AsNoTracking()
+                .ToListAsync();
+
+            var vodIds = pipelines.Select(p => p.VodId).ToList();
+            var vods = await _dbContext.TwitchVods
+                .AsNoTracking()
+                .Where(v => vodIds.Contains(v.Id))
+                .ToDictionaryAsync(v => v.Id);
+
+            _logger.LogDebug("Loaded {Count} VODs from database", vods.Count);
+
+            return pipelines
+                .OrderByDescending(p => Array.IndexOf(JobManager.StagePriority, p.Stage))
+                .ThenBy(p => p.VodId)
+                .Select(p => MapToDto(p, vods.GetValueOrDefault(p.VodId)))
+                .ToList();
+        }
+
         public async Task<bool> PauseJobAsync(string vodId)
         {
             var job = await _dbContext.Pipelines.FindAsync(vodId);
-            if (job == null) return false;
+            if (job == null)
+            {
+                _logger.LogWarning("Pause requested for unknown VOD {VodId}", vodId);
+                return false;
+            }
             job.Paused = true;
             await _dbContext.SaveChangesAsync();
+            _logger.LogInformation("Paused VOD {VodId}", vodId);
             return true;
         }
 
         public async Task<bool> ResumeJobAsync(string vodId)
         {
             var job = await _dbContext.Pipelines.FindAsync(vodId);
-            if (job == null) return false;
+            if (job == null)
+            {
+                _logger.LogWarning("Resume requested for unknown VOD {VodId}", vodId);
+                return false;
+            }
             job.Paused = false;
             await _dbContext.SaveChangesAsync();
+            _logger.LogInformation("Resumed VOD {VodId}", vodId);
             return true;
         }
 
         public async Task<bool> CancelJobAsync(string vodId)
         {
             var job = await _dbContext.Pipelines.FindAsync(vodId);
-            if (job == null) return false;
+            if (job == null)
+            {
+                _logger.LogWarning("Cancel requested for unknown VOD {VodId}", vodId);
+                return false;
+            }
             job.Stage = "Cancelled";
             job.Paused = false;
+            job.Failed = false;
+            job.FailCount = 0;
+            job.FailReason = string.Empty;
+            job.Description = string.Empty;
             await _dbContext.SaveChangesAsync();
+            _logger.LogInformation("Cancelled VOD {VodId}", vodId);
             return true;
         }
 
         public async Task<bool> RetryJobAsync(string vodId)
         {
             var job = await _dbContext.Pipelines.FindAsync(vodId);
-            if (job == null) return false;
+            if (job == null)
+            {
+                _logger.LogWarning("Retry requested for unknown VOD {VodId}", vodId);
+                return false;
+            }
             job.Failed = false;
             job.FailCount = 0;
             job.FailReason = string.Empty;
@@ -109,6 +156,7 @@ namespace Vod2Tube.Application.Services
             job.YoutubeVideoId = string.Empty;
             job.ResumableUploadUri = null;
             await _dbContext.SaveChangesAsync();
+            _logger.LogInformation("Retried VOD {VodId} — reset to Pending", vodId);
             return true;
         }
 

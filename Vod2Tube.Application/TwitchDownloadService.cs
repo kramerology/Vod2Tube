@@ -572,6 +572,12 @@ namespace Vod2Tube.Application
                 segmentFiles.Select(f => $"file '{f.Replace('\\', '/')}'"),
                 cancellationToken);
 
+            // Remove any leftover partial output from a previous interrupted concat.
+            // Without this, ffmpeg would prompt "Overwrite? [y/N]" on the inherited stdin
+            // (the parent terminal), causing it to hang indefinitely with no log output.
+            if (File.Exists(outputFile.FullName))
+                File.Delete(outputFile.FullName);
+
             string concatArguments =
                 $"-f concat -safe 0 -i \"{concatListPath}\" " +
                 $"-c copy -movflags +faststart \"{outputFile.FullName}\"";
