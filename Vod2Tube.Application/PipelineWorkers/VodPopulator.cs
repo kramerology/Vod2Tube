@@ -96,7 +96,7 @@ namespace Vod2Tube.Application
                 }
                 finally
                 {
-                    await Task.Delay(TimeSpan.FromMinutes(5), stoppingToken); 
+                    await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken); 
                 }
 
 

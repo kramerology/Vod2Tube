@@ -1,0 +1,391 @@
+﻿<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>KINETIC_VOD | VOD Queue Dashboard</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "surface-container-high": "#222a3d",
+              "surface-variant": "#2d3449",
+              "primary-container": "#4d8eff",
+              "secondary-container": "#ee9800",
+              "on-surface-variant": "#c2c6d6",
+              "on-tertiary-fixed": "#002113",
+              "error-container": "#93000a",
+              "tertiary-fixed": "#6ffbbe",
+              "on-primary-container": "#00285d",
+              "on-secondary-fixed": "#2a1700",
+              "on-secondary-container": "#5b3800",
+              "outline": "#8c909f",
+              "surface-bright": "#31394d",
+              "on-tertiary": "#003824",
+              "surface-container-low": "#131b2e",
+              "secondary": "#ffb95f",
+              "on-error": "#690005",
+              "surface-container": "#171f33",
+              "inverse-on-surface": "#283044",
+              "primary-fixed-dim": "#adc6ff",
+              "tertiary": "#4edea3",
+              "surface-container-highest": "#2d3449",
+              "outline-variant": "#424754",
+              "secondary-fixed": "#ffddb8",
+              "on-primary": "#002e6a",
+              "surface-tint": "#adc6ff",
+              "surface-dim": "#0b1326",
+              "surface": "#0b1326",
+              "on-error-container": "#ffdad6",
+              "on-background": "#dae2fd",
+              "tertiary-container": "#00a572",
+              "primary-fixed": "#d8e2ff",
+              "on-secondary-fixed-variant": "#653e00",
+              "on-tertiary-container": "#00311f",
+              "background": "#0b1326",
+              "inverse-primary": "#005ac2",
+              "secondary-fixed-dim": "#ffb95f",
+              "tertiary-fixed-dim": "#4edea3",
+              "on-secondary": "#472a00",
+              "on-tertiary-fixed-variant": "#005236",
+              "on-primary-fixed-variant": "#004395",
+              "primary": "#adc6ff",
+              "error": "#ffb4ab",
+              "on-primary-fixed": "#001a42",
+              "on-surface": "#dae2fd",
+              "surface-container-lowest": "#060e20",
+              "inverse-surface": "#dae2fd"
+            },
+            fontFamily: {
+              "headline": ["Space Grotesk"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        body { font-family: 'Inter', sans-serif; }
+        h1, h2, h3, .font-space { font-family: 'Space Grotesk', sans-serif; }
+        .glass-header { background: rgba(11, 19, 38, 0.8); backdrop-filter: blur(20px); }
+    </style>
+</head>
+<body class="bg-surface-dim text-on-surface min-h-screen">
+<!-- TopAppBar -->
+<header class="fixed top-0 w-full z-50 bg-[#0b1326]/80 backdrop-blur-xl shadow-[0px_12px_32px_rgba(218,226,253,0.06)] flex items-center justify-between px-6 h-16 w-full">
+<div class="flex items-center gap-8">
+<span class="text-xl font-bold tracking-tighter text-[#dae2fd] font-['Space_Grotesk']">KINETIC_VOD</span>
+<div class="hidden md:flex items-center gap-6">
+<nav class="flex items-center gap-6 text-sm font-['Space_Grotesk'] tracking-tighter">
+<a class="text-[#dae2fd]/60 hover:bg-[#31394d] transition-colors px-3 py-1 rounded" href="#">Live Monitor</a>
+<a class="text-[#3B82F6] font-bold px-3 py-1 rounded" href="#">VOD Queue</a>
+<a class="text-[#dae2fd]/60 hover:bg-[#31394d] transition-colors px-3 py-1 rounded" href="#">Analytics</a>
+</nav>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-2 px-3 py-1.5 bg-surface-container rounded-lg border border-outline-variant/20">
+<span class="material-symbols-outlined text-[#3B82F6] text-sm">database</span>
+<span class="text-[10px] font-mono text-on-surface-variant uppercase tracking-widest">Master_Node: Active</span>
+</div>
+<div class="flex items-center gap-3">
+<button class="p-2 text-[#dae2fd]/60 hover:bg-[#31394d] transition-colors rounded-lg"><span class="material-symbols-outlined">memory</span></button>
+<button class="p-2 text-[#dae2fd]/60 hover:bg-[#31394d] transition-colors rounded-lg"><span class="material-symbols-outlined">settings_input_component</span></button>
+<div class="h-8 w-8 rounded-full bg-surface-variant border border-outline-variant/30 flex items-center justify-center overflow-hidden">
+<img alt="User profile" class="w-full h-full object-cover" data-alt="Professional user profile avatar" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBIKmY-VyArPL8ECOkLtPNeFHX_smFzNl1JBCquA2poQ_Rmzq9eJUvY_0pmSHEfPPvPPL7IFjSdFFGwRjKjsn21u_4Un6xFQxI2vjsMsbkTCetSKwyadh3ppEHNtCPpUzuEaVXUe9DJbQ-6N4amwDeiVNp1xCn_RM7UoMKqEy9SDbFnEgOwtZlNy9uFSPjJuL7SUa2dK3IL6oAkVOUAbd4MblCsTZNzb6UjmQrAiXMcQDQpJhTZ5LyQoC-UgQ7RVy3KxevyoVz9Vg"/>
+</div>
+</div>
+</div>
+</header>
+<!-- SideNavBar -->
+<aside class="fixed left-0 top-0 h-full w-64 bg-[#171f33] border-r border-[#424754]/20 pt-20 pb-8 flex flex-col hidden lg:flex z-40">
+<div class="px-6 mb-8">
+<h2 class="font-['Space_Grotesk'] font-bold text-[#dae2fd]">VOD Processor</h2>
+<p class="text-[10px] uppercase tracking-[0.2em] text-on-surface-variant/50">Precision Laboratory</p>
+</div>
+<nav class="flex-1 px-4 space-y-1">
+<a class="flex items-center gap-3 px-4 py-3 text-[#dae2fd]/70 hover:text-[#dae2fd] hover:bg-[#2d3449] transition-all rounded-lg font-['Inter'] text-sm font-medium tracking-wide" href="#">
+<span class="material-symbols-outlined">tv</span>
+<span>Channels</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 bg-[#3B82F6]/10 text-[#3B82F6] rounded-lg border-l-4 border-[#3B82F6] font-['Inter'] text-sm font-medium tracking-wide" href="#">
+<span class="material-symbols-outlined">queue_play_next</span>
+<span>VOD Queue</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-[#dae2fd]/70 hover:text-[#dae2fd] hover:bg-[#2d3449] transition-all rounded-lg font-['Inter'] text-sm font-medium tracking-wide" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span>Settings</span>
+</a>
+</nav>
+<div class="px-4 mt-auto">
+<button class="w-full py-3 px-4 bg-gradient-to-br from-primary to-primary-container text-on-primary-container font-bold rounded-lg flex items-center justify-center gap-2 active:scale-95 duration-200">
+<span class="material-symbols-outlined">play_arrow</span>
+<span>Start Worker</span>
+</button>
+</div>
+</aside>
+<!-- Main Content Canvas -->
+<main class="lg:ml-64 pt-24 px-6 pb-12">
+<!-- Header & Filters Section -->
+<section class="mb-10">
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-6">
+<div>
+<h1 class="text-4xl font-bold tracking-tighter mb-2">Processing Queue</h1>
+<p class="text-on-surface-variant max-w-xl">Real-time telemetry for automated Twitch VOD archival. Monitor high-fidelity rendering and cloud synchronization tasks.</p>
+</div>
+<div class="flex items-center gap-2 bg-surface-container-low p-1.5 rounded-full border border-outline-variant/10">
+<button class="px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider bg-surface-container-highest text-on-surface">By Date</button>
+<button class="px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider text-on-surface-variant hover:text-on-surface transition-colors">By Status</button>
+<button class="px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider text-on-surface-variant hover:text-on-surface transition-colors">By Channel</button>
+</div>
+</div>
+<!-- Global Filter Chips -->
+<div class="mt-8 flex flex-wrap items-center gap-3">
+<span class="text-[10px] uppercase tracking-widest text-on-surface-variant mr-2">Filters:</span>
+<button class="px-4 py-1 rounded-full text-xs font-medium bg-primary text-on-primary shadow-lg shadow-primary/10">All Jobs</button>
+<button class="px-4 py-1 rounded-full text-xs font-medium bg-surface-container-lowest text-on-surface-variant hover:bg-surface-bright transition-all">Pending</button>
+<button class="px-4 py-1 rounded-full text-xs font-medium bg-surface-container-lowest text-on-surface-variant hover:bg-surface-bright transition-all">Active</button>
+<button class="px-4 py-1 rounded-full text-xs font-medium bg-surface-container-lowest text-on-surface-variant hover:bg-surface-bright transition-all">Paused</button>
+<button class="px-4 py-1 rounded-full text-xs font-medium bg-surface-container-lowest text-on-surface-variant hover:bg-surface-bright transition-all">Failed</button>
+</div>
+</section>
+<!-- VOD Grid (Bento Style) -->
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+<!-- Job Card: Active (Downloading) -->
+<div class="bg-surface-container-high rounded-xl overflow-hidden group hover:ring-1 hover:ring-primary/30 transition-all duration-300">
+<div class="h-40 relative overflow-hidden">
+<img alt="Thumbnail" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" data-alt="High contrast gaming stream thumbnail" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBDP2BYr250uJcpLAf4DGDAjmV6qBFANpWzooYGbD78GNGaY6xXdihMg-aMFoJgjDvC4qA1IfxA4ds_8-H66SeWWohmwbpLBfx6SXBrs8SygQ2Msv_YmiUZ3_pJBPKEreHDeO9i4u2dMA3k2akZ-RzEDvw6j21mXfUHAYYAcUuG-DUJAb07BHsZmpeYvcB4xF7rZ77TKxrs7aTziGihKaa4jcOyBxH4_1m8d_lSiMVNOez8oolcUIoctAO4w-y7qMKsB2ZzCYJ4Yg"/>
+<div class="absolute inset-0 bg-gradient-to-t from-surface-container-high via-transparent to-transparent"></div>
+<div class="absolute top-4 left-4">
+<span class="px-3 py-1 rounded bg-secondary-container/15 text-secondary text-[10px] font-bold uppercase tracking-wider border border-secondary/20">DownloadingVod</span>
+</div>
+<div class="absolute bottom-4 right-4 text-[10px] font-mono text-on-surface/60">
+                        1080p60 â¢ 6.4 GB
+                    </div>
+</div>
+<div class="p-6">
+<div class="flex justify-between items-start mb-4">
+<div>
+<h3 class="font-bold text-lg leading-tight mb-1">Morning Valorant Grinds - Act III</h3>
+<p class="text-xs text-on-surface-variant">Channel: <span class="text-primary">NeonGhost_</span> â¢ Oct 24, 2023</p>
+</div>
+</div>
+<div class="space-y-4">
+<div>
+<div class="flex justify-between text-[10px] font-bold uppercase tracking-tighter mb-1.5">
+<span class="text-on-surface-variant">Stream Data Pipeline</span>
+<span class="text-secondary">74%</span>
+</div>
+<div class="h-2 w-full bg-surface-variant rounded-full overflow-hidden">
+<div class="h-full bg-gradient-to-r from-secondary to-on-secondary-container rounded-full" style="width: 74%"></div>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-4">
+<div class="bg-surface-dim/40 p-2 rounded border border-outline-variant/10">
+<p class="text-[9px] uppercase tracking-widest text-on-surface-variant/60 mb-1">Bitrate</p>
+<p class="text-sm font-mono font-bold">8.2 Mbps</p>
+</div>
+<div class="bg-surface-dim/40 p-2 rounded border border-outline-variant/10">
+<p class="text-[9px] uppercase tracking-widest text-on-surface-variant/60 mb-1">ETA</p>
+<p class="text-sm font-mono font-bold">14m 22s</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Job Card: Rendering Chat -->
+<div class="bg-surface-container-high rounded-xl overflow-hidden group hover:ring-1 hover:ring-primary/30 transition-all duration-300">
+<div class="h-40 relative overflow-hidden">
+<img alt="Thumbnail" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" data-alt="Cyberpunk style tech aesthetic background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuACBAlctSHurWKUn1PZH2zmcuTJl313wLLKaBeyXHq0DfeE5jGEiiBnrqfUQjw7xR7LzNmjEeYq1N3-b0-6lHExNexDDnnT_rzbRxufx0LxJ0RsU5WyDPn2-SQX8OfY9lthAXrhYyriEuH_7WxmyAZfQBSX9fk-b4f3ekX3sk8j5e0Iu00hgZPWg0Rb9C4pGcGWOtLsLGfbj3DzZnHg_ONYfcwBF-KGYs-eJrVxI9qdL-kH4DxCA5R4pGfpMbv6ICU0M3-kX7UXHQ"/>
+<div class="absolute inset-0 bg-gradient-to-t from-surface-container-high via-transparent to-transparent"></div>
+<div class="absolute top-4 left-4">
+<span class="px-3 py-1 rounded bg-tertiary-container/15 text-tertiary text-[10px] font-bold uppercase tracking-wider border border-tertiary/20">RenderingChat</span>
+</div>
+<div class="absolute bottom-4 right-4 text-[10px] font-mono text-on-surface/60">
+                        Overlay: Dark v2
+                    </div>
+</div>
+<div class="p-6">
+<div class="flex justify-between items-start mb-4">
+<div>
+<h3 class="font-bold text-lg leading-tight mb-1">Just Chatting &amp; Chill Coding</h3>
+<p class="text-xs text-on-surface-variant">Channel: <span class="text-primary">DevRoot</span> â¢ Oct 23, 2023</p>
+</div>
+</div>
+<div class="space-y-4">
+<div>
+<div class="flex justify-between text-[10px] font-bold uppercase tracking-tighter mb-1.5">
+<span class="text-on-surface-variant">GPU Render Cluster</span>
+<span class="text-tertiary">31%</span>
+</div>
+<div class="h-2 w-full bg-surface-variant rounded-full overflow-hidden">
+<div class="h-full bg-gradient-to-r from-tertiary to-on-tertiary-container rounded-full" style="width: 31%"></div>
+</div>
+</div>
+<div class="flex items-center gap-3">
+<button class="flex-1 py-2 text-[10px] font-bold uppercase tracking-widest bg-surface-bright text-on-surface rounded border border-outline-variant/20 hover:bg-surface-container-highest transition-colors">Pause Task</button>
+<button class="p-2 text-on-surface-variant hover:text-on-surface"><span class="material-symbols-outlined text-lg">more_vert</span></button>
+</div>
+</div>
+</div>
+</div>
+<!-- Job Card: Failed -->
+<div class="bg-surface-container-high rounded-xl overflow-hidden group hover:ring-1 hover:ring-error/30 transition-all duration-300">
+<div class="h-40 relative overflow-hidden grayscale opacity-40">
+<img alt="Thumbnail" class="w-full h-full object-cover" data-alt="Abstract glitch art pattern" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBxhsknQ-j7eMKYRXCtCZSIDxVpeRy0prweZO07GR2lJv3pJuOWLfyPCmVfSrXvmPMQzA-3d7GCFv6x1uwT5zC4sZDRRvYrmzpxYC6su5MZgkm-wmjCvnTD1aA0Lg8JDgpmA_WNCf_cB-XB7Le31qDmSEJcA1S0Kx1zRJueM_YEsiqXMieQSm3UR01I7Rfqf9dNF3O5eY3_8wV_7ZRozj3yfdLGRvSfQ4jSsev-udpp5QJFqvjn3xr6lKnJXmqPVIjALs128A_c7g"/>
+<div class="absolute inset-0 bg-gradient-to-t from-surface-container-high via-transparent to-transparent"></div>
+<div class="absolute top-4 left-4">
+<span class="px-3 py-1 rounded bg-error-container/15 text-error text-[10px] font-bold uppercase tracking-wider border border-error/20">Failed</span>
+</div>
+</div>
+<div class="p-6 border-t-2 border-error/20">
+<div class="flex justify-between items-start mb-4">
+<div>
+<h3 class="font-bold text-lg leading-tight mb-1">24 Hour Charity Stream</h3>
+<p class="text-xs text-on-surface-variant">Channel: <span class="text-primary">GlobalSave</span> â¢ Oct 22, 2023</p>
+</div>
+</div>
+<div class="bg-error-container/10 p-3 rounded-lg border border-error/10 mb-4">
+<div class="flex items-start gap-2">
+<span class="material-symbols-outlined text-error text-sm mt-0.5">error</span>
+<p class="text-[11px] text-error leading-relaxed">NetworkTimeout: Connection to Twitch API lost during segment 442/1040. Retries exhausted.</p>
+</div>
+</div>
+<button class="w-full py-2 bg-error text-on-error font-bold text-[10px] uppercase tracking-widest rounded shadow-lg shadow-error/10 active:scale-95 transition-all">Restart Job</button>
+</div>
+</div>
+<!-- Job Card: Pending -->
+<div class="bg-surface-container-low/50 rounded-xl border border-outline-variant/10 overflow-hidden group">
+<div class="p-6 flex flex-col h-full">
+<div class="flex items-center justify-between mb-4">
+<span class="px-3 py-1 rounded bg-surface-variant text-on-surface-variant text-[10px] font-bold uppercase tracking-wider">Pending</span>
+<span class="text-[10px] font-mono text-on-surface-variant">ID: #VX-9002</span>
+</div>
+<h3 class="font-bold text-lg leading-tight mb-1 text-on-surface/50">Sim Racing: Bathurst 1000</h3>
+<p class="text-xs text-on-surface-variant/50 mb-6">Added 2 hours ago â¢ Queue Position: 4</p>
+<div class="mt-auto space-y-3">
+<div class="flex items-center gap-2 text-[10px] text-on-surface-variant">
+<span class="material-symbols-outlined text-sm">schedule</span>
+                            Scheduled for 04:00 AM UTC
+                        </div>
+<div class="flex items-center gap-3">
+<button class="flex-1 py-2 text-[10px] font-bold uppercase tracking-widest border border-outline-variant/30 text-on-surface-variant rounded hover:bg-surface-bright transition-all">Cancel</button>
+<button class="flex-1 py-2 text-[10px] font-bold uppercase tracking-widest bg-primary-container/20 text-primary-container rounded hover:bg-primary-container/30 transition-all">Priority Up</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Job Card: Combining -->
+<div class="bg-surface-container-high rounded-xl overflow-hidden group hover:ring-1 hover:ring-primary/30 transition-all duration-300">
+<div class="h-40 relative overflow-hidden">
+<img alt="Thumbnail" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" data-alt="Abstract dark geometric shapes" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBfQdJzH8WZ-t4UF1Q9CKB1T-00YMQWTvA7sRpbpAh3SjNaWvwP3gaaCRSoAqc37jXh9PEpLoT_FiMrTvKGlEucZWzIp-moIGOjWgpGuWu4j1xnNwHCAArbdVJ4wjl90c8CuXKeUPTAgMFcx9ROhj8-LltVXrOSLe3k76qrSB5Qtcp8CPc_reTR1jMTcjbBloyaCHtJiQFS3vmrCKy1Ibet1_5VaWaIRHncyac9mxFGjK4FGGZ4HrOQ6tQ-iBdxKFPsXpFpugZFrQ"/>
+<div class="absolute inset-0 bg-gradient-to-t from-surface-container-high via-transparent to-transparent"></div>
+<div class="absolute top-4 left-4">
+<span class="px-3 py-1 rounded bg-primary-container/15 text-primary-fixed-dim text-[10px] font-bold uppercase tracking-wider border border-primary/20">Combining</span>
+</div>
+</div>
+<div class="p-6">
+<div class="flex justify-between items-start mb-4">
+<div>
+<h3 class="font-bold text-lg leading-tight mb-1">Muxing Test: HEVC v2</h3>
+<p class="text-xs text-on-surface-variant">Channel: <span class="text-primary">LabSystem</span> â¢ Oct 24, 2023</p>
+</div>
+</div>
+<div class="space-y-4">
+<div>
+<div class="flex justify-between text-[10px] font-bold uppercase tracking-tighter mb-1.5">
+<span class="text-on-surface-variant">FFmpeg Multiplexer</span>
+<span class="text-primary">92%</span>
+</div>
+<div class="h-2 w-full bg-surface-variant rounded-full overflow-hidden">
+<div class="h-full bg-gradient-to-r from-primary to-primary-container rounded-full" style="width: 92%"></div>
+</div>
+</div>
+<div class="flex items-center justify-between">
+<span class="text-[10px] text-on-surface-variant italic">Finalizing MP4 container...</span>
+<span class="material-symbols-outlined text-primary text-sm animate-pulse">sync</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Job Card: Uploading -->
+<div class="bg-surface-container-high rounded-xl overflow-hidden group hover:ring-1 hover:ring-tertiary/30 transition-all duration-300">
+<div class="h-40 relative overflow-hidden">
+<img alt="Thumbnail" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" data-alt="Satellite view of earth at night" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDCQcP-ciMHYVPFn25xfuI62DKMLtKl2kEvRh8LNLnDclc6G8V3-NFgfXG3TfQAWfjDghJbMK8aUqO3deFgX9ghVsBfCkk-dH11AKaQyY2mBLqLbTg2QS5jRZd3yamEmfQRJAzFZpOpGNTXymxbLqe2z6f1tY8P-MO8n7cmun_BL2arcMAlsiME8nPO8WukQR5cRQ7U2crxumO5QXJVQC3iiiF0Nk-peSIovB2JEJTCi549KEc-HYQ0BaQQVmpOmR21aPEik12LOg"/>
+<div class="absolute inset-0 bg-gradient-to-t from-surface-container-high via-transparent to-transparent"></div>
+<div class="absolute top-4 left-4">
+<span class="px-3 py-1 rounded bg-tertiary-container/15 text-tertiary text-[10px] font-bold uppercase tracking-wider border border-tertiary/20">Uploading</span>
+</div>
+</div>
+<div class="p-6">
+<div class="flex justify-between items-start mb-4">
+<div>
+<h3 class="font-bold text-lg leading-tight mb-1">Podcast Episode #42: AI Horizons</h3>
+<p class="text-xs text-on-surface-variant">Target: <span class="text-primary">YouTube_Archive</span> â¢ Oct 21, 2023</p>
+</div>
+</div>
+<div class="space-y-4">
+<div>
+<div class="flex justify-between text-[10px] font-bold uppercase tracking-tighter mb-1.5">
+<span class="text-on-surface-variant">S3 Cloud Sync</span>
+<span class="text-tertiary">58%</span>
+</div>
+<div class="h-2 w-full bg-surface-variant rounded-full overflow-hidden">
+<div class="h-full bg-gradient-to-r from-tertiary to-on-tertiary-container rounded-full" style="width: 58%"></div>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-4">
+<div class="bg-surface-dim/40 p-2 rounded border border-outline-variant/10">
+<p class="text-[9px] uppercase tracking-widest text-on-surface-variant/60 mb-1">Speed</p>
+<p class="text-sm font-mono font-bold">120 MB/s</p>
+</div>
+<div class="bg-surface-dim/40 p-2 rounded border border-outline-variant/10">
+<p class="text-[9px] uppercase tracking-widest text-on-surface-variant/60 mb-1">Protocol</p>
+<p class="text-sm font-mono font-bold">RCLONE/S3</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- System Stats Footer (Laboratory Aesthetic) -->
+<footer class="mt-12 p-8 bg-surface-container-low rounded-2xl border border-outline-variant/5">
+<div class="grid grid-cols-2 md:grid-cols-4 gap-8">
+<div>
+<p class="text-[10px] uppercase tracking-widest text-on-surface-variant mb-2">Total Processed</p>
+<p class="text-3xl font-bold font-['Space_Grotesk'] tracking-tighter">1,284 <span class="text-xs font-normal text-on-surface-variant/60">VODS</span></p>
+</div>
+<div>
+<p class="text-[10px] uppercase tracking-widest text-on-surface-variant mb-2">Data Ingested</p>
+<p class="text-3xl font-bold font-['Space_Grotesk'] tracking-tighter">14.2 <span class="text-xs font-normal text-on-surface-variant/60">TB</span></p>
+</div>
+<div>
+<p class="text-[10px] uppercase tracking-widest text-on-surface-variant mb-2">Cluster Load</p>
+<p class="text-3xl font-bold font-['Space_Grotesk'] tracking-tighter text-tertiary">12%</p>
+</div>
+<div>
+<p class="text-[10px] uppercase tracking-widest text-on-surface-variant mb-2">Uptime</p>
+<p class="text-3xl font-bold font-['Space_Grotesk'] tracking-tighter">99.9<span class="text-xs font-normal text-on-surface-variant/60">%</span></p>
+</div>
+</div>
+</footer>
+</main>
+<!-- Contextual FAB (Only for Dashboard/Home) -->
+<div class="fixed bottom-8 right-8 z-50">
+<button class="h-14 w-14 rounded-full bg-gradient-to-br from-primary to-primary-container text-on-primary-container shadow-2xl flex items-center justify-center active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-3xl">add</span>
+</button>
+</div>
+</body></html>
