@@ -82,7 +82,7 @@ namespace Vod2Tube.Application.Services
                 .Where(v => vodIds.Contains(v.Id))
                 .ToDictionaryAsync(v => v.Id);
 
-            _logger.LogDebug("Loaded {Count} VODs from database", pipelines.Count);
+            _logger.LogDebug("Loaded {Count} VODs from database", vods.Count);
 
             return pipelines
                 .OrderByDescending(p => Array.IndexOf(JobManager.StagePriority, p.Stage))
