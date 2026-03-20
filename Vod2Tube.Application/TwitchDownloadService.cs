@@ -82,7 +82,18 @@ namespace Vod2Tube.Application
             !string.IsNullOrWhiteSpace(vodId) && Regex.IsMatch(vodId, @"^[a-zA-Z0-9_-]+$");
 
 
-        public async IAsyncEnumerable<string> RenderChatVideoAsync(FileInfo chatFile, FileInfo vodFile, DirectoryInfo tempDir, FileInfo finalFile, CancellationToken cancellationToken = default)
+        /// <summary>
+        /// Renders the chat JSON file into an MP4 video using TwitchDownloaderCLI.
+        /// The render is split into 5-minute segments so that an interrupted render can be
+        /// resumed without re-rendering segments that already exist on disk.  All completed
+        /// segments are concatenated into <paramref name="finalFile"/> at the end.
+        /// </summary>
+        public async IAsyncEnumerable<string> RenderChatVideoAsync(
+            FileInfo chatFile,
+            FileInfo vodFile,
+            DirectoryInfo tempDir,
+            FileInfo finalFile,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             if (!File.Exists(chatFile.FullName))
                 throw new FileNotFoundException($"Chat file not found: {chatFile.FullName}");
@@ -90,16 +101,121 @@ namespace Vod2Tube.Application
                 throw new FileNotFoundException($"VOD file not found: {vodFile.FullName}");
 
             int chatWidth  = 350;      // width of chat panel in pixels
-            int fontSize   = 15;       // base font size for chat text //11 too small
+            int fontSize   = 15;       // base font size for chat text
             int updateRate = 0;        // render each frame exactly (no interpolation)
             string fpsStr  = RunProcessWithOutput(_ffprobePath, $"-v error -select_streams v:0 -show_entries stream=r_frame_rate -of default=noprint_wrappers=1:nokey=1 {vodFile.FullName}").Trim();
-            string height  = RunProcessWithOutput(_ffprobePath, $"-v error -select_streams v:0 -show_entries stream=height -of default=noprint_wrappers=1:nokey=1 {vodFile.FullName}").Trim();         
-            double fps = ParseFps(fpsStr);
-            int.TryParse(height, out int videoHeight);
-            bool is4K = videoHeight >= 2160;
+            string height  = RunProcessWithOutput(_ffprobePath, $"-v error -select_streams v:0 -show_entries stream=height -of default=noprint_wrappers=1:nokey=1 {vodFile.FullName}").Trim();
+            double fps     = ParseFps(fpsStr);
 
-            string arguments = $"chatrender -i \"{chatFile.FullName}\" --temp-path \"{tempDir.FullName}\" -o \"{finalFile.FullName}\" --collision overwrite --framerate {fps.ToString(CultureInfo.InvariantCulture)} --chat-height {height} --chat-width {chatWidth} --font-size {fontSize} --update-rate {updateRate} --ffmpeg-path \"{_ffmpegPath}\" ";
+            double totalDuration = GetVideoDuration(vodFile.FullName);
+            if (totalDuration <= 0)
+                throw new InvalidOperationException($"Could not determine a valid duration for VOD file: {vodFile.FullName}");
 
+            int segmentCount = (int)Math.Ceiling(totalDuration / SegmentLength.TotalSeconds);
+
+            // Segments are stored alongside the output file in a dedicated subdirectory.
+            string segmentsDir = Path.Combine(
+                finalFile.DirectoryName ?? ".",
+                Path.GetFileNameWithoutExtension(finalFile.Name) + "_chat_segments");
+            Directory.CreateDirectory(segmentsDir);
+
+            yield return $"Rendering chat in {segmentCount} segment(s)";
+
+            var segmentFiles = new List<string>(segmentCount);
+
+            for (int i = 0; i < segmentCount; i++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                double startSec    = i * SegmentLength.TotalSeconds;
+                double segDuration = Math.Min(SegmentLength.TotalSeconds, totalDuration - startSec);
+
+                // Guard against floating-point rounding causing a non-positive segment duration.
+                if (segDuration <= 0)
+                {
+                    _logger.LogDebug(
+                        "Computed non-positive segment duration {Duration} at index {Index}; stopping chat render segmentation loop.",
+                        segDuration, i);
+                    break;
+                }
+
+                string segmentFile    = Path.Combine(segmentsDir, $"segment_{i:D4}.mp4");
+                string segmentTmpFile = segmentFile + ".tmp";
+                segmentFiles.Add(segmentFile);
+
+                if (File.Exists(segmentFile))
+                {
+                    _logger.LogInformation("Chat segment {Index}/{Total} already exists, skipping", i + 1, segmentCount);
+                    yield return $"Chat segment {i + 1}/{segmentCount} already rendered, skipping";
+                    continue;
+                }
+
+                // Remove any leftover temp file from a previous interrupted run.
+                if (File.Exists(segmentTmpFile))
+                    File.Delete(segmentTmpFile);
+
+                // TwitchDownloaderCLI accepts times as "{value}s" for seconds.
+                string beginningArg = startSec.ToString("F3", CultureInfo.InvariantCulture) + "s";
+                string endingArg    = (startSec + segDuration).ToString("F3", CultureInfo.InvariantCulture) + "s";
+
+                string segArguments =
+                    $"chatrender -i \"{chatFile.FullName}\" --temp-path \"{tempDir.FullName}\" " +
+                    $"-o \"{segmentTmpFile}\" --collision overwrite " +
+                    $"--framerate {fps.ToString(CultureInfo.InvariantCulture)} --chat-height {height} " +
+                    $"--chat-width {chatWidth} --font-size {fontSize} --update-rate {updateRate} " +
+                    $"--ffmpeg-path \"{_ffmpegPath}\" -b {beginningArg} -e {endingArg}";
+
+                yield return $"Rendering chat segment {i + 1}/{segmentCount}";
+                await foreach (var status in RunTwitchDownloaderCliAsync(segArguments, $"chat segment {i + 1}/{segmentCount}", cancellationToken))
+                    yield return status;
+
+                // Atomic promotion: only the successfully-completed segment file is used for resume detection.
+                File.Move(segmentTmpFile, segmentFile);
+                _logger.LogInformation("Chat segment {Index}/{Total} complete", i + 1, segmentCount);
+                yield return $"Chat segment {i + 1}/{segmentCount} complete";
+            }
+
+            // Concatenate all segments into the final output without re-encoding.
+            yield return "Concatenating chat segments into final video";
+
+            string concatListPath = Path.Combine(segmentsDir, "concat_list.txt");
+            // ffmpeg concat demuxer requires forward-slash paths on all platforms.
+            await File.WriteAllLinesAsync(
+                concatListPath,
+                segmentFiles.Select(f => $"file '{f.Replace('\\', '/')}'"),
+                cancellationToken);
+
+            // Remove any leftover partial output from a previous interrupted concat.
+            if (File.Exists(finalFile.FullName))
+                File.Delete(finalFile.FullName);
+
+            string concatArguments =
+                $"-f concat -safe 0 -i \"{concatListPath}\" " +
+                $"-c copy -movflags +faststart \"{finalFile.FullName}\"";
+
+            await foreach (var status in RunFfmpegAsync(concatArguments, "while concatenating chat segments", cancellationToken))
+                yield return status;
+
+            // Best-effort cleanup of the segments directory after a successful concatenation.
+            // Use recursive deletion so the directory is removed even if individual file
+            // deletes above failed for any reason.
+            try { Directory.Delete(segmentsDir, recursive: true); }
+            catch (Exception ex) { _logger.LogDebug(ex, "Failed to remove chat segments directory {Path}", segmentsDir); }
+
+            yield return "Done rendering chat video";
+        }
+
+        /// <summary>
+        /// Runs TwitchDownloaderCLI with the given <paramref name="arguments"/>, yielding
+        /// <c>[STATUS]</c> progress strings as they are emitted.
+        /// Throws <see cref="InvalidOperationException"/> if the process exits with a non-zero code.
+        /// The process is killed when <paramref name="cancellationToken"/> is cancelled.
+        /// </summary>
+        private async IAsyncEnumerable<string> RunTwitchDownloaderCliAsync(
+            string arguments,
+            string errorContext,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
             var psi = new ProcessStartInfo
             {
                 FileName = DefaultCliFileName,
@@ -114,58 +230,61 @@ namespace Vod2Tube.Application
 
             using var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
 
-            var regex = new Regex(@"^\[STATUS\] - (.*?)$");
-            var statusQueue = new System.Collections.Concurrent.ConcurrentQueue<string>();
-            var errorOutput = new StringBuilder();
-            var outputReceived = new TaskCompletionSource<bool>();
+            var statusRegex  = new Regex(@"^\[STATUS\] - (.*?)$");
+            var statusQueue  = new System.Collections.Concurrent.ConcurrentQueue<string>();
+            var errorOutput  = new StringBuilder();
 
-            process.OutputDataReceived += (sender, e) =>
+            process.OutputDataReceived += (_, e) =>
             {
                 if (string.IsNullOrEmpty(e.Data)) return;
-                var match = regex.Match(e.Data);
+                var match = statusRegex.Match(e.Data);
                 if (match.Success)
-                {
                     statusQueue.Enqueue(match.Groups[1].Value);
-                }
             };
 
-            process.ErrorDataReceived += (sender, e) =>
+            process.ErrorDataReceived += (_, e) =>
             {
                 if (!string.IsNullOrEmpty(e.Data))
-                {
                     errorOutput.AppendLine(e.Data);
-                }
             };
 
             process.Start();
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
 
-            var waitTask = process.WaitForExitAsync(cancellationToken);
+            // Kill the process tree when the caller cancels so no orphaned TwitchDownloaderCLI
+            // processes survive beyond this enumerator.
+            using var killOnCancel = cancellationToken.Register(() =>
+            {
+                try { process.Kill(entireProcessTree: true); }
+                catch (InvalidOperationException) { } // process already exited or disposed
+            });
+
+            // Use CancellationToken.None so WaitForExitAsync waits for the process to
+            // fully exit after Kill() rather than returning immediately on cancellation.
+            var waitTask = process.WaitForExitAsync(CancellationToken.None);
 
             while (!waitTask.IsCompleted)
             {
                 while (statusQueue.TryDequeue(out var status))
-                {
                     yield return status;
-                }
                 await Task.Delay(100, cancellationToken);
             }
 
             // Drain any remaining statuses after process exit
             while (statusQueue.TryDequeue(out var status))
-            {
                 yield return status;
-            }
 
             await waitTask;
 
             if (process.ExitCode != 0)
             {
                 string errorText = errorOutput.ToString();
-                _logger.LogError("TwitchDownloaderCLI chatrender exited with code {ExitCode} for chat file {ChatFile}. Arguments: {Arguments}. Stderr: {Stderr}",
-                    process.ExitCode, chatFile.FullName, arguments, errorText);
-                throw new InvalidOperationException($"TwitchDownloaderCLI chatrender exited with code {process.ExitCode} for chat file {chatFile.FullName}.");
+                _logger.LogError(
+                    "TwitchDownloaderCLI exited with code {ExitCode} for {Context}. Arguments: {Arguments}. Stderr: {Stderr}",
+                    process.ExitCode, errorContext, arguments, errorText);
+                throw new InvalidOperationException(
+                    $"TwitchDownloaderCLI exited with code {process.ExitCode} for {errorContext}.");
             }
         }
 
