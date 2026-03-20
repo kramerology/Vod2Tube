@@ -73,6 +73,14 @@ query GetUserProfileImage($login: String!) {
   }
 }";
 
+        private const string VodThumbnailQuery = @"
+query VideoThumbnail($videoId: ID!) {
+  video(id: $videoId) {
+    id
+    previewThumbnailURL(width: 480, height: 270)
+  }
+}";
+
         private const string MomentsQuery = @"
 query VideoMoments($videoId: ID!) {
   video(id: $videoId) {
@@ -197,6 +205,49 @@ query VideoMoments($videoId: ID!) {
             }
 
             return videosConnection;
+        }
+
+        /// <summary>
+        /// Fetches Twitch VOD preview thumbnail URLs for the given VOD IDs in a single batched request.
+        /// Returns a dictionary keyed by VOD ID to thumbnail URL.
+        /// </summary>
+        public async Task<Dictionary<string, string>> GetVodThumbnailUrlsAsync(IEnumerable<string> vodIds)
+        {
+            var idList = vodIds.Distinct().ToList();
+            if (idList.Count == 0)
+                return new Dictionary<string, string>();
+
+            const int batchSize = 35;
+            var dict = new Dictionary<string, string>();
+
+            for (int offset = 0; offset < idList.Count; offset += batchSize)
+            {
+                var batch = idList.Skip(offset).Take(batchSize).Select(id => new
+                {
+                    query     = VodThumbnailQuery,
+                    variables = new { videoId = id }
+                }).ToList();
+
+                var content = new StringContent(JsonConvert.SerializeObject(batch), Encoding.UTF8, "application/json");
+                var response = await _http.PostAsync(GqlEndpoint, content);
+                response.EnsureSuccessStatusCode();
+
+                var json = await response.Content.ReadAsStringAsync();
+                var results = JsonConvert.DeserializeObject<List<VideoThumbnailBatchItem>>(json);
+                if (results == null) continue;
+
+                foreach (var item in results)
+                {
+                    var video = item.Data?.Video;
+                    if (video != null && !string.IsNullOrEmpty(video.PreviewThumbnailURL))
+                        dict[video.Id] = video.PreviewThumbnailURL;
+                }
+
+                if (offset + batchSize < idList.Count)
+                    await Task.Delay(500);
+            }
+
+            return dict;
         }
 
         /// <summary>
@@ -423,6 +474,27 @@ query VideoMoments($videoId: ID!) {
         public Game? Game { get; set; }
     }
 
+
+    internal class VideoThumbnailBatchItem
+    {
+        [JsonProperty("data")]
+        public VideoThumbnailBatchData? Data { get; set; }
+    }
+
+    internal class VideoThumbnailBatchData
+    {
+        [JsonProperty("video")]
+        public VideoThumbnailData? Video { get; set; }
+    }
+
+    internal class VideoThumbnailData
+    {
+        [JsonProperty("id")]
+        public string Id { get; set; } = string.Empty;
+
+        [JsonProperty("previewThumbnailURL")]
+        public string PreviewThumbnailURL { get; set; } = string.Empty;
+    }
 
     internal class ProfileImageBatchItem
     {
