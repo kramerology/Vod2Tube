@@ -318,10 +318,19 @@ public class PipelineServiceTests
     // =========================================================================
 
     [Test]
-    public async Task CancelJobAsync_ExistingJob_SetsStageAndClearsPause()
+    public async Task CancelJobAsync_ExistingJob_SetsStageAndClearsFields()
     {
-        await using var ctx = CreateInMemoryContext(nameof(CancelJobAsync_ExistingJob_SetsStageAndClearsPause));
-        ctx.Pipelines.Add(MakePipeline("v1", "Combining", paused: true));
+        await using var ctx = CreateInMemoryContext(nameof(CancelJobAsync_ExistingJob_SetsStageAndClearsFields));
+        ctx.Pipelines.Add(new Pipeline
+        {
+            VodId = "v1",
+            Stage = "Combining",
+            Paused = true,
+            Failed = true,
+            FailCount = 2,
+            FailReason = "Network error",
+            Description = "Progress info"
+        });
         await ctx.SaveChangesAsync();
         var svc = new PipelineService(ctx, NullLogger<PipelineService>.Instance);
 
@@ -331,6 +340,10 @@ public class PipelineServiceTests
         var job = await ctx.Pipelines.FindAsync("v1");
         await Assert.That(job!.Stage).IsEqualTo("Cancelled");
         await Assert.That(job.Paused).IsEqualTo(false);
+        await Assert.That(job.Failed).IsEqualTo(false);
+        await Assert.That(job.FailCount).IsEqualTo(0);
+        await Assert.That(job.FailReason).IsEqualTo(string.Empty);
+        await Assert.That(job.Description).IsEqualTo(string.Empty);
     }
 
     [Test]
