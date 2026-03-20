@@ -1,0 +1,19 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": ".NET Core Launch",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build",
+            "program": "${workspaceFolder}\\Vod2Tube.Web\\bin\\Debug\\net10.0\\Vod2Tube.Web.dll",
+            "args": [],
+            "cwd": "${workspaceFolder}/Vod2Tube.Web/",
+            "console": "internalConsole",
+            "env": {
+                "ASPNETCORE_ENVIRONMENT": "Development",
+                "ASPNETCORE_CONTENTROOT": "${workspaceFolder}/Vod2Tube.Web"
+            }
+        }
+    ]
+}
