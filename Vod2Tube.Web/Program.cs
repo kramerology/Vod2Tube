@@ -4,6 +4,19 @@ using Vod2Tube.Application;
 using Vod2Tube.Application.Services;
 using Vod2Tube.Infrastructure;
 
+
+AppDomain.CurrentDomain.UnhandledException += (sender, args) =>
+{
+    var ex = args.ExceptionObject as Exception;
+    Console.Error.WriteLine($"[FATAL] Unhandled exception: {ex}");
+};
+
+TaskScheduler.UnobservedTaskException += (sender, args) =>
+{
+    Console.Error.WriteLine($"[FATAL] Unobserved task exception: {args.Exception}");
+    args.SetObserved();
+};
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddRazorComponents()
