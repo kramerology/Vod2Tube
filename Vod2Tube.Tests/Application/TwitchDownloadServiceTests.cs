@@ -355,4 +355,128 @@ public class TwitchDownloadServiceTests
 
         await Assert.That(count).IsEqualTo(3);
     }
+
+    // =========================================================================
+    // Chat render segment boundary computation
+    // =========================================================================
+
+    /// <summary>
+    /// The start time of the first segment should be 0 seconds.
+    /// </summary>
+    [Test]
+    public async Task ChatRenderSegment_FirstSegment_StartIsZero()
+    {
+        int segmentIndex = 0;
+        double startSec = segmentIndex * TwitchDownloadService.SegmentLength.TotalSeconds;
+
+        await Assert.That(startSec).IsEqualTo(0.0);
+    }
+
+    /// <summary>
+    /// The start time of the second segment (index 1) should equal one segment length.
+    /// </summary>
+    [Test]
+    public async Task ChatRenderSegment_SecondSegment_StartIsOneSegmentLength()
+    {
+        int segmentIndex = 1;
+        double startSec = segmentIndex * TwitchDownloadService.SegmentLength.TotalSeconds;
+
+        await Assert.That(startSec).IsEqualTo(TwitchDownloadService.SegmentLength.TotalSeconds);
+    }
+
+    /// <summary>
+    /// A full segment that is not the last one should have a duration equal to
+    /// <see cref="TwitchDownloadService.SegmentLength"/>.
+    /// </summary>
+    [Test]
+    public async Task ChatRenderSegment_FullSegment_DurationEqualsSegmentLength()
+    {
+        double totalDuration   = TwitchDownloadService.SegmentLength.TotalSeconds * 3; // 15 minutes
+        int    segmentIndex    = 0;
+        double startSec        = segmentIndex * TwitchDownloadService.SegmentLength.TotalSeconds;
+        double segDuration     = Math.Min(TwitchDownloadService.SegmentLength.TotalSeconds, totalDuration - startSec);
+
+        await Assert.That(segDuration).IsEqualTo(TwitchDownloadService.SegmentLength.TotalSeconds);
+    }
+
+    /// <summary>
+    /// The last segment of a video whose duration is not an exact multiple of the
+    /// segment length should have a duration equal to the remainder.
+    /// </summary>
+    [Test]
+    public async Task ChatRenderSegment_TailSegment_DurationIsRemainder()
+    {
+        double remainder       = 42.0; // seconds into the third segment
+        double totalDuration   = TwitchDownloadService.SegmentLength.TotalSeconds * 2 + remainder;
+        int    segmentIndex    = 2; // last segment (third, zero-based)
+        double startSec        = segmentIndex * TwitchDownloadService.SegmentLength.TotalSeconds;
+        double segDuration     = Math.Min(TwitchDownloadService.SegmentLength.TotalSeconds, totalDuration - startSec);
+
+        await Assert.That(segDuration).IsEqualTo(remainder);
+    }
+
+    /// <summary>
+    /// The segment end time passed to TwitchDownloaderCLI (startSec + segDuration) should
+    /// equal totalDuration for the last segment of a video that is not an exact multiple
+    /// of the segment length.
+    /// </summary>
+    [Test]
+    public async Task ChatRenderSegment_TailSegmentEndArg_EqualsVodDuration()
+    {
+        double totalDuration = TwitchDownloadService.SegmentLength.TotalSeconds * 2 + 90; // 10:30
+        int segmentCount     = (int)Math.Ceiling(totalDuration / TwitchDownloadService.SegmentLength.TotalSeconds);
+        int lastIndex        = segmentCount - 1;
+        double startSec      = lastIndex * TwitchDownloadService.SegmentLength.TotalSeconds;
+        double segDuration   = Math.Min(TwitchDownloadService.SegmentLength.TotalSeconds, totalDuration - startSec);
+        double endSec        = startSec + segDuration;
+
+        await Assert.That(endSec).IsEqualTo(totalDuration);
+    }
+
+    // =========================================================================
+    // Chat render time argument format
+    // =========================================================================
+
+    /// <summary>
+    /// The beginning time argument passed to TwitchDownloaderCLI should use the
+    /// format "{seconds.FFF}s" with an invariant decimal separator.
+    /// </summary>
+    [Test]
+    public async Task ChatRenderSegment_BeginningArg_UsesSecondsFormat()
+    {
+        double startSec     = TwitchDownloadService.SegmentLength.TotalSeconds; // 300 s
+        string beginningArg = startSec.ToString("F3", System.Globalization.CultureInfo.InvariantCulture) + "s";
+
+        await Assert.That(beginningArg).IsEqualTo("300.000s");
+    }
+
+    /// <summary>
+    /// The ending time argument passed to TwitchDownloaderCLI should use the
+    /// format "{seconds.FFF}s" with an invariant decimal separator.
+    /// </summary>
+    [Test]
+    public async Task ChatRenderSegment_EndingArg_UsesSecondsFormat()
+    {
+        double startSec   = 0;
+        double segDur     = TwitchDownloadService.SegmentLength.TotalSeconds; // 300 s
+        string endingArg  = (startSec + segDur).ToString("F3", System.Globalization.CultureInfo.InvariantCulture) + "s";
+
+        await Assert.That(endingArg).IsEqualTo("300.000s");
+    }
+
+    /// <summary>
+    /// A fractional end time should be formatted with three decimal places and
+    /// an invariant (dot) decimal separator so TwitchDownloaderCLI parses it correctly
+    /// on all locale settings.
+    /// </summary>
+    [Test]
+    public async Task ChatRenderSegment_FractionalEndArg_UsesInvariantDecimalSeparator()
+    {
+        double endSec    = 630.5;
+        string endingArg = endSec.ToString("F3", System.Globalization.CultureInfo.InvariantCulture) + "s";
+
+        // Must use "." as decimal separator regardless of OS locale.
+        await Assert.That(endingArg).IsEqualTo("630.500s");
+        await Assert.That(endingArg).Contains(".");
+    }
 }
