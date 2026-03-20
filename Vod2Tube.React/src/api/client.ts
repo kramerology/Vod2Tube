@@ -34,6 +34,7 @@ export interface PipelineJob {
   duration: string;
   vodUrl: string;
   addedAtUTC: string;
+  thumbnailUrl?: string;
 }
 
 // ── Channel endpoints ─────────────────────────────────────────────────────────
@@ -78,6 +79,9 @@ export const vodsApi = {
 
   retry: (vodId: string) =>
     request<void>(`/vods/${encodeURIComponent(vodId)}/retry`, { method: 'POST' }),
+
+  getThumbnailUrls: (vodIds: string[]) =>
+    request<Record<string, string>>(`/vods/thumbnails?ids=${vodIds.map(encodeURIComponent).join(',')}`),
 };
 
 // ── Stage helpers ─────────────────────────────────────────────────────────────

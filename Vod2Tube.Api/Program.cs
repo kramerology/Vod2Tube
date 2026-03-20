@@ -95,4 +95,11 @@ vods.MapPost("/{vodId}/cancel", async (string vodId, PipelineService svc) =>
 vods.MapPost("/{vodId}/retry", async (string vodId, PipelineService svc) =>
     await svc.RetryJobAsync(vodId) ? Results.Ok() : Results.NotFound());
 
+vods.MapGet("/thumbnails", async (string ids, TwitchGraphQLService twitchSvc) =>
+{
+    var vodIds = ids.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    var urls = await twitchSvc.GetVodThumbnailUrlsAsync(vodIds);
+    return Results.Ok(urls);
+});
+
 app.Run();

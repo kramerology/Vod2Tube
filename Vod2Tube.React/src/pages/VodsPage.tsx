@@ -32,9 +32,11 @@ function stageIcon(job: PipelineJob): string {
 
 function JobCard({
   job,
+  thumbnailUrl,
   onPause, onResume, onCancel, onRetry,
 }: {
   job: PipelineJob;
+  thumbnailUrl?: string;
   onPause: () => void;
   onResume: () => void;
   onCancel: () => void;
@@ -54,20 +56,23 @@ function JobCard({
     >
       {/* Thumbnail banner */}
       <div className={`h-36 relative overflow-hidden ${done ? 'grayscale-[0.5]' : ''}`}>
-        <div
-          className="absolute inset-0"
-          style={{
-            background: job.failed
-              ? 'linear-gradient(135deg, #93000a 0%, #2d3449 100%)'
-              : isActive(job)
-                ? 'linear-gradient(135deg, #ee9800 0%, #0b1326 100%)'
-                : isPending(job)
-                  ? 'linear-gradient(135deg, #4d8eff 0%, #0b1326 100%)'
-                  : job.stage === 'Uploaded'
-                    ? 'linear-gradient(135deg, #00a572 0%, #0b1326 100%)'
-                    : 'linear-gradient(135deg, #424754 0%, #0b1326 100%)',
-          }}
-        />
+        {thumbnailUrl
+          ? <img src={thumbnailUrl} alt={job.title} className="absolute inset-0 w-full h-full object-cover" />
+          : <div
+              className="absolute inset-0"
+              style={{
+                background: job.failed
+                  ? 'linear-gradient(135deg, #93000a 0%, #2d3449 100%)'
+                  : isActive(job)
+                    ? 'linear-gradient(135deg, #ee9800 0%, #0b1326 100%)'
+                    : isPending(job)
+                      ? 'linear-gradient(135deg, #4d8eff 0%, #0b1326 100%)'
+                      : job.stage === 'Uploaded'
+                        ? 'linear-gradient(135deg, #00a572 0%, #0b1326 100%)'
+                        : 'linear-gradient(135deg, #424754 0%, #0b1326 100%)',
+              }}
+            />
+        }
         <div className="absolute inset-0 bg-gradient-to-t from-surface-container-high via-transparent to-transparent" />
 
         {/* Stage badge */}
@@ -245,6 +250,8 @@ function FilterChip({ label, active, count, onClick }: {
 
 export default function VodsPage() {
   const [jobs, setJobs] = useState<PipelineJob[]>([]);
+  const [thumbnailUrls, setThumbnailUrls] = useState<Record<string, string>>({});
+  const fetchedIdsRef = useRef<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>('all');
@@ -255,6 +262,14 @@ export default function VodsPage() {
       setError(null);
       const data = await vodsApi.getAll();
       setJobs(data);
+
+      const newIds = data.map(j => j.vodId).filter(id => !fetchedIdsRef.current.has(id));
+      if (newIds.length > 0) {
+        newIds.forEach(id => fetchedIdsRef.current.add(id));
+        vodsApi.getThumbnailUrls(newIds)
+          .then(urls => setThumbnailUrls(prev => ({ ...prev, ...urls })))
+          .catch(() => {});
+      }
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -345,6 +360,7 @@ export default function VodsPage() {
             <JobCard
               key={job.vodId}
               job={job}
+              thumbnailUrl={thumbnailUrls[job.vodId]}
               onPause={() => act(() => vodsApi.pause(job.vodId))}
               onResume={() => act(() => vodsApi.resume(job.vodId))}
               onCancel={() => act(() => vodsApi.cancel(job.vodId))}
