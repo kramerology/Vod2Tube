@@ -55,6 +55,9 @@ export const channelsApi = {
 
   delete: (id: number) =>
     request<void>(`/channels/${id}`, { method: 'DELETE' }),
+
+  getAvatarUrls: () =>
+    request<Record<string, string>>('/channels/avatars'),
 };
 
 // ── Pipeline / VODs endpoints ─────────────────────────────────────────────────

@@ -86,16 +86,17 @@ function ChannelDialog({
 
 function ChannelCard({
   channel,
+  avatarUrl,
   onEdit,
   onToggle,
   onDelete,
 }: {
   channel: Channel;
+  avatarUrl?: string;
   onEdit: () => void;
   onToggle: () => void;
   onDelete: () => void;
 }) {
-  const initial = channel.channelName[0]?.toUpperCase() ?? '?';
   const added = new Date(channel.addedAtUTC).toLocaleDateString('en-US', {
     month: 'short', day: 'numeric', year: 'numeric',
   });
@@ -109,15 +110,20 @@ function ChannelCard({
       }`}
     >
       {/* Banner */}
-      <div className="relative h-28 bg-surface-container-highest overflow-hidden">
-        <div
-          className="absolute inset-0 opacity-20"
-          style={{
-            background: channel.active
-              ? 'linear-gradient(135deg, #3B82F6 0%, #4edea3 100%)'
-              : 'linear-gradient(135deg, #424754 0%, #2d3449 100%)',
-          }}
-        />
+      <div className="relative h-36 bg-surface-container-highest overflow-hidden">
+        {avatarUrl
+          ? <img src={avatarUrl} alt={channel.channelName} className="absolute inset-0 w-full h-full object-cover" />
+          : <div
+              className="absolute inset-0"
+              style={{
+                background: channel.active
+                  ? 'linear-gradient(135deg, #3B82F6 0%, #4edea3 100%)'
+                  : 'linear-gradient(135deg, #424754 0%, #2d3449 100%)',
+              }}
+            />
+        }
+        {/* Darken overlay so the badge is always readable */}
+        <div className="absolute inset-0 bg-black/30" />
         {/* Status badge */}
         <div className="absolute top-3 right-3">
           {channel.active ? (
@@ -132,16 +138,10 @@ function ChannelCard({
             </span>
           )}
         </div>
-        {/* Avatar */}
-        <div className="absolute -bottom-6 left-5">
-          <div className="w-14 h-14 rounded-2xl bg-surface-container border-2 border-surface-container-high flex items-center justify-center shadow-2xl">
-            <span className="text-2xl font-bold text-primary font-headline">{initial}</span>
-          </div>
-        </div>
       </div>
 
       {/* Body */}
-      <div className="px-5 pt-9 pb-5 flex-1 flex flex-col">
+      <div className="px-5 pt-5 pb-5 flex-1 flex flex-col">
         <div className="mb-3">
           <a
             href={`https://www.twitch.tv/${channel.channelName}`}
@@ -192,6 +192,7 @@ function ChannelCard({
 
 export default function ChannelsPage() {
   const [channels, setChannels] = useState<Channel[]>([]);
+  const [avatarUrls, setAvatarUrls] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [dialog, setDialog] = useState<Partial<Channel> | null>(null);
@@ -202,6 +203,7 @@ export default function ChannelsPage() {
       setError(null);
       const data = await channelsApi.getAll();
       setChannels(data);
+      channelsApi.getAvatarUrls().then(setAvatarUrls).catch(() => {});
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -298,6 +300,7 @@ export default function ChannelsPage() {
             <ChannelCard
               key={c.id}
               channel={c}
+              avatarUrl={avatarUrls[c.channelName.toLowerCase()]}
               onEdit={() => setDialog({ ...c })}
               onToggle={() => handleToggle(c)}
               onDelete={() => setConfirmDelete(c)}

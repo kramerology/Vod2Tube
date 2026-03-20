@@ -62,6 +62,14 @@ channels.MapPut("/{id:int}", async (int id, Channel channel, ChannelService svc)
 channels.MapDelete("/{id:int}", async (int id, ChannelService svc) =>
     await svc.DeleteChannelAsync(id) ? Results.NoContent() : Results.NotFound());
 
+channels.MapGet("/avatars", async (ChannelService channelSvc, TwitchGraphQLService twitchSvc) =>
+{
+    var all = await channelSvc.GetAllChannelsAsync();
+    var logins = all.Select(c => c.ChannelName);
+    var urls = await twitchSvc.GetProfileImageUrlsAsync(logins);
+    return Results.Ok(urls);
+});
+
 // ── VODs / Pipeline ───────────────────────────────────────────────────────────
 
 var vods = app.MapGroup("/api/vods");
