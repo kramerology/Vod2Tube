@@ -65,6 +65,14 @@ query ChannelVideos($login: String!, $first: Int!, $after: Cursor, $types: [Broa
   }
 }";
 
+        private const string ProfileImageQuery = @"
+query GetUserProfileImage($login: String!) {
+  user(login: $login) {
+    login
+    profileImageURL(width: 150)
+  }
+}";
+
         private const string MomentsQuery = @"
 query VideoMoments($videoId: ID!) {
   video(id: $videoId) {
@@ -189,6 +197,43 @@ query VideoMoments($videoId: ID!) {
             }
 
             return videosConnection;
+        }
+
+        /// <summary>
+        /// Fetches Twitch profile image URLs for the given channel logins in a single batched request.
+        /// Returns a dictionary keyed by login (lower-case) to profile image URL.
+        /// </summary>
+        public async Task<Dictionary<string, string>> GetProfileImageUrlsAsync(IEnumerable<string> logins)
+        {
+            var loginList = logins.Select(l => l.ToLowerInvariant()).Distinct().ToList();
+            if (loginList.Count == 0)
+                return new Dictionary<string, string>();
+
+            var batch = loginList.Select(login => new
+            {
+                query     = ProfileImageQuery,
+                variables = new { login }
+            }).ToList();
+
+            var content = new StringContent(JsonConvert.SerializeObject(batch), Encoding.UTF8, "application/json");
+            var response = await _http.PostAsync(GqlEndpoint, content);
+            response.EnsureSuccessStatusCode();
+
+            var json = await response.Content.ReadAsStringAsync();
+            var results = JsonConvert.DeserializeObject<List<ProfileImageBatchItem>>(json);
+
+            var dict = new Dictionary<string, string>();
+            if (results == null)
+                return dict;
+
+            for (int i = 0; i < results.Count && i < loginList.Count; i++)
+            {
+                var user = results[i].Data?.User;
+                if (user != null && !string.IsNullOrEmpty(user.ProfileImageURL))
+                    dict[loginList[i]] = user.ProfileImageURL;
+            }
+
+            return dict;
         }
 
         public async Task PopulateVodMomentsAsync(List<TwitchVod> vods)
@@ -378,6 +423,27 @@ query VideoMoments($videoId: ID!) {
         public Game? Game { get; set; }
     }
 
+
+    internal class ProfileImageBatchItem
+    {
+        [JsonProperty("data")]
+        public ProfileImageBatchData? Data { get; set; }
+    }
+
+    internal class ProfileImageBatchData
+    {
+        [JsonProperty("user")]
+        public ProfileImageUser? User { get; set; }
+    }
+
+    internal class ProfileImageUser
+    {
+        [JsonProperty("login")]
+        public string Login { get; set; } = string.Empty;
+
+        [JsonProperty("profileImageURL")]
+        public string ProfileImageURL { get; set; } = string.Empty;
+    }
 
     #region GraphQL paging types (internal)
 
