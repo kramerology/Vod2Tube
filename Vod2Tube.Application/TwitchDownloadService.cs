@@ -111,7 +111,10 @@ namespace Vod2Tube.Application
             if (totalDuration <= 0)
                 throw new InvalidOperationException($"Could not determine a valid duration for VOD file: {vodFile.FullName}");
 
-            int segmentCount = (int)Math.Ceiling(totalDuration / SegmentLength.TotalSeconds);
+            // Estimate the total number of segments for display purposes only.
+            // Actual iteration is driven by time so the concat list exactly matches
+            // the segments that were rendered/retained — no early-break truncation risk.
+            int estimatedSegmentCount = (int)Math.Ceiling(totalDuration / SegmentLength.TotalSeconds);
 
             // Segments are stored alongside the output file in a dedicated subdirectory.
             string segmentsDir = Path.Combine(
@@ -119,53 +122,59 @@ namespace Vod2Tube.Application
                 Path.GetFileNameWithoutExtension(finalFile.Name) + "_chat_segments");
             Directory.CreateDirectory(segmentsDir);
 
-            yield return $"Rendering chat in {segmentCount} segment(s)";
+            yield return $"Rendering chat in {estimatedSegmentCount} segment(s)";
 
-            var segmentFiles = new List<string>(segmentCount);
+            var segmentFiles = new List<string>();
 
             const int maxSegmentAttempts = 3;
-            for (int i = 0; i < segmentCount; i++)
+            int segmentIndex = 0;
+            for (double startSec = 0; startSec < totalDuration; startSec += SegmentLength.TotalSeconds, segmentIndex++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                double startSec    = i * SegmentLength.TotalSeconds;
                 double segDuration = Math.Min(SegmentLength.TotalSeconds, totalDuration - startSec);
 
-                // Guard against floating-point rounding causing a non-positive segment duration.
+                // Defensive guard: the loop condition (startSec < totalDuration) ensures segDuration > 0
+                // in all normal cases, but a tiny floating-point overshoot in the accumulator could
+                // produce a zero or negative value.  Stop early rather than passing an invalid duration
+                // to TwitchDownloaderCLI.  Because this check is before segmentFiles.Add the concat
+                // list will not contain a path for this non-existent segment.
                 if (segDuration <= 0)
                 {
                     _logger.LogDebug(
-                        "Computed non-positive segment duration {Duration} at index {Index}; stopping chat render segmentation loop.",
-                        segDuration, i);
+                        "Computed non-positive segment duration {Duration} at index {Index}; stopping chat render loop.",
+                        segDuration, segmentIndex);
                     break;
                 }
 
-                string segmentFile    = Path.Combine(segmentsDir, $"segment_{i:D4}.mp4");
+                int displayNum     = segmentIndex + 1;
+
+                string segmentFile    = Path.Combine(segmentsDir, $"segment_{segmentIndex:D4}.mp4");
                 // Use ".part.mp4" (not ".mp4.tmp") so the final extension stays ".mp4".
                 // TwitchDownloaderCLI's default --output-args has no explicit "-f" flag, so
                 // FFmpeg infers the container from the file extension.  A ".tmp" extension
                 // causes FFmpeg to exit immediately with "Unable to find a suitable output
                 // format", which closes its stdin pipe and produces the
                 // "The pipe has been ended." IOException inside TwitchDownloaderCLI.
-                string segmentTmpFile = Path.Combine(segmentsDir, $"segment_{i:D4}.part.mp4");
+                string segmentTmpFile = Path.Combine(segmentsDir, $"segment_{segmentIndex:D4}.part.mp4");
                 segmentFiles.Add(segmentFile);
 
                 if (File.Exists(segmentFile))
                 {
-                    _logger.LogInformation("Chat segment {Index}/{Total} already exists, skipping", i + 1, segmentCount);
-                    yield return $"Chat segment {i + 1}/{segmentCount} already rendered, skipping";
+                    _logger.LogInformation("Chat segment {Index}/{Total} already exists, skipping", displayNum, estimatedSegmentCount);
+                    yield return $"Chat segment {displayNum}/{estimatedSegmentCount} already rendered, skipping";
                     continue;
                 }
 
                 // TwitchDownloaderCLI accepts times as "{value}s" for seconds.
-                string beginningArg = startSec.ToString("F3", CultureInfo.InvariantCulture) + "s";
-                string endingArg    = (startSec + segDuration).ToString("F3", CultureInfo.InvariantCulture) + "s";
+                string beginningArg = FormatSegmentTimeArg(startSec);
+                string endingArg    = FormatSegmentTimeArg(startSec + segDuration);
 
                 // Each segment gets its own isolated temp directory so that stale or
                 // partially-written emote cache files from a previous failed run cannot
                 // cause TwitchDownloaderCLI's internal FFmpeg pipe to close unexpectedly
                 // ("The pipe has been ended." / exit code -532462766).
-                string segTempDir = Path.Combine(tempDir.FullName, $"seg_{i:D4}");
+                string segTempDir = Path.Combine(tempDir.FullName, $"seg_{segmentIndex:D4}");
 
                 Exception? lastSegmentException = null;
                 for (int attempt = 0; attempt < maxSegmentAttempts; attempt++)
@@ -174,9 +183,9 @@ namespace Vod2Tube.Application
 
                     if (attempt > 0)
                     {
-                        yield return $"Retrying chat segment {i + 1}/{segmentCount} (attempt {attempt + 1}/{maxSegmentAttempts})";
+                        yield return $"Retrying chat segment {displayNum}/{estimatedSegmentCount} (attempt {attempt + 1}/{maxSegmentAttempts})";
                         _logger.LogWarning("Retrying chat segment {Index}/{Total}, attempt {Attempt}/{MaxAttempts}",
-                            i + 1, segmentCount, attempt + 1, maxSegmentAttempts);
+                            displayNum, estimatedSegmentCount, attempt + 1, maxSegmentAttempts);
                     }
 
                     // Remove any leftover .tmp file from a previous attempt.
@@ -195,7 +204,7 @@ namespace Vod2Tube.Application
                         $"--chat-width {chatWidth} --font-size {fontSize} --update-rate {updateRate} " +
                         $"--ffmpeg-path \"{_ffmpegPath}\" -b {beginningArg} -e {endingArg}";
 
-                    yield return $"Rendering chat segment {i + 1}/{segmentCount}";
+                    yield return $"Rendering chat segment {displayNum}/{estimatedSegmentCount}";
 
                     // Buffer status messages: yield return is not permitted inside a try/catch block,
                     // so we collect them here and yield them after the try/catch completes.
@@ -203,7 +212,7 @@ namespace Vod2Tube.Application
                     lastSegmentException = null;
                     try
                     {
-                        await foreach (var status in RunTwitchDownloaderCliAsync(segArguments, $"chat segment {i + 1}/{segmentCount}", cancellationToken))
+                        await foreach (var status in RunTwitchDownloaderCliAsync(segArguments, $"chat segment {displayNum}/{estimatedSegmentCount}", cancellationToken))
                             buffered.Add(status);
                     }
                     catch (Exception ex) when (ex is not OperationCanceledException)
@@ -223,8 +232,8 @@ namespace Vod2Tube.Application
                     {
                         // Atomic promotion: only a fully-rendered segment is used for resume detection.
                         File.Move(segmentTmpFile, segmentFile);
-                        _logger.LogInformation("Chat segment {Index}/{Total} complete", i + 1, segmentCount);
-                        yield return $"Chat segment {i + 1}/{segmentCount} complete";
+                        _logger.LogInformation("Chat segment {Index}/{Total} complete", displayNum, estimatedSegmentCount);
+                        yield return $"Chat segment {displayNum}/{estimatedSegmentCount} complete";
                         break;
                     }
 
@@ -233,12 +242,12 @@ namespace Vod2Tube.Application
 
                     _logger.LogWarning(lastSegmentException,
                         "Chat segment {Index}/{Total} attempt {Attempt}/{MaxAttempts} failed",
-                        i + 1, segmentCount, attempt + 1, maxSegmentAttempts);
+                        displayNum, estimatedSegmentCount, attempt + 1, maxSegmentAttempts);
                 }
 
                 if (lastSegmentException != null)
                     throw new InvalidOperationException(
-                        $"Chat segment {i + 1}/{segmentCount} failed after {maxSegmentAttempts} attempt(s).", lastSegmentException);
+                        $"Chat segment {displayNum}/{estimatedSegmentCount} failed after {maxSegmentAttempts} attempt(s).", lastSegmentException);
             }
 
             // Concatenate all segments into the final output without re-encoding.
@@ -482,6 +491,14 @@ namespace Vod2Tube.Application
         private static readonly Regex _encoderNameRegex = new(@"\b(h264_amf|h264_nvenc|h264_qsv)\b", RegexOptions.Compiled);
         private static readonly Regex _ffmpegProgressRegex = new(@"frame=\s*(\d+).*time=(\S+)", RegexOptions.Compiled);
         internal static readonly TimeSpan SegmentLength = TimeSpan.FromMinutes(5);
+
+        /// <summary>
+        /// Formats a time in seconds as a TwitchDownloaderCLI time argument string in the
+        /// <c>{value.FFF}s</c> format with invariant decimal separator.
+        /// Used for both the <c>-b</c> (beginning) and <c>-e</c> (ending) flags.
+        /// </summary>
+        internal static string FormatSegmentTimeArg(double seconds) =>
+            seconds.ToString("F3", CultureInfo.InvariantCulture) + "s";
 
         /// <summary>
         /// Selects the best available H.264 encoder from the supplied ffmpeg encoder list output.
