@@ -248,7 +248,12 @@ namespace Vod2Tube.Application
             // ffmpeg concat demuxer requires forward-slash paths on all platforms.
             await File.WriteAllLinesAsync(
                 concatListPath,
-                segmentFiles.Select(f => $"file '{f.Replace('\\', '/')}'"),
+                segmentFiles.Select(f =>
+                {
+                    var normalizedPath = f.Replace('\\', '/');
+                    var escapedPath = normalizedPath.Replace("'", "'\\''");
+                    return $"file '{escapedPath}'";
+                }),
                 cancellationToken);
 
             // Remove any leftover partial output from a previous interrupted concat.
