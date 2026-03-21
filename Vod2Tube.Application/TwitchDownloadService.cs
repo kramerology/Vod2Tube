@@ -348,7 +348,26 @@ namespace Vod2Tube.Application
             {
                 while (statusQueue.TryDequeue(out var status))
                     yield return status;
-                await Task.Delay(100, cancellationToken);
+
+                // Do NOT pass cancellationToken to Task.Delay — if it threw OCE here the
+                // enumerator would exit immediately, skipping Kill() and the waitTask drain.
+                // Instead we poll for cancellation manually so we can clean up first.
+                await Task.Delay(100);
+
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    // The killOnCancel registration may have already fired; calling Kill()
+                    // again is safe — it is a no-op if the process has already exited.
+                    try { process.Kill(entireProcessTree: true); }
+                    catch (InvalidOperationException) { }
+
+                    // Wait for the process to actually exit and for the output streams to
+                    // drain before rethrowing, capped at 5 s to avoid blocking indefinitely.
+                    try { await waitTask.WaitAsync(TimeSpan.FromSeconds(5)); }
+                    catch (TimeoutException) { /* process didn't exit in time; proceed to rethrow OCE */ }
+
+                    cancellationToken.ThrowIfCancellationRequested();
+                }
             }
 
             // Drain any remaining statuses after process exit
