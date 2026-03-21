@@ -123,6 +123,7 @@ namespace Vod2Tube.Application
 
             var segmentFiles = new List<string>(segmentCount);
 
+            const int maxSegmentAttempts = 3;
             for (int i = 0; i < segmentCount; i++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -140,7 +141,13 @@ namespace Vod2Tube.Application
                 }
 
                 string segmentFile    = Path.Combine(segmentsDir, $"segment_{i:D4}.mp4");
-                string segmentTmpFile = segmentFile + ".tmp";
+                // Use ".part.mp4" (not ".mp4.tmp") so the final extension stays ".mp4".
+                // TwitchDownloaderCLI's default --output-args has no explicit "-f" flag, so
+                // FFmpeg infers the container from the file extension.  A ".tmp" extension
+                // causes FFmpeg to exit immediately with "Unable to find a suitable output
+                // format", which closes its stdin pipe and produces the
+                // "The pipe has been ended." IOException inside TwitchDownloaderCLI.
+                string segmentTmpFile = Path.Combine(segmentsDir, $"segment_{i:D4}.part.mp4");
                 segmentFiles.Add(segmentFile);
 
                 if (File.Exists(segmentFile))
@@ -150,29 +157,88 @@ namespace Vod2Tube.Application
                     continue;
                 }
 
-                // Remove any leftover temp file from a previous interrupted run.
-                if (File.Exists(segmentTmpFile))
-                    File.Delete(segmentTmpFile);
-
                 // TwitchDownloaderCLI accepts times as "{value}s" for seconds.
                 string beginningArg = startSec.ToString("F3", CultureInfo.InvariantCulture) + "s";
                 string endingArg    = (startSec + segDuration).ToString("F3", CultureInfo.InvariantCulture) + "s";
 
-                string segArguments =
-                    $"chatrender -i \"{chatFile.FullName}\" --temp-path \"{tempDir.FullName}\" " +
-                    $"-o \"{segmentTmpFile}\" --collision overwrite " +
-                    $"--framerate {fps.ToString(CultureInfo.InvariantCulture)} --chat-height {height} " +
-                    $"--chat-width {chatWidth} --font-size {fontSize} --update-rate {updateRate} " +
-                    $"--ffmpeg-path \"{_ffmpegPath}\" -b {beginningArg} -e {endingArg}";
+                // Each segment gets its own isolated temp directory so that stale or
+                // partially-written emote cache files from a previous failed run cannot
+                // cause TwitchDownloaderCLI's internal FFmpeg pipe to close unexpectedly
+                // ("The pipe has been ended." / exit code -532462766).
+                string segTempDir = Path.Combine(tempDir.FullName, $"seg_{i:D4}");
 
-                yield return $"Rendering chat segment {i + 1}/{segmentCount}";
-                await foreach (var status in RunTwitchDownloaderCliAsync(segArguments, $"chat segment {i + 1}/{segmentCount}", cancellationToken))
-                    yield return status;
+                Exception? lastSegmentException = null;
+                for (int attempt = 0; attempt < maxSegmentAttempts; attempt++)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
 
-                // Atomic promotion: only the successfully-completed segment file is used for resume detection.
-                File.Move(segmentTmpFile, segmentFile);
-                _logger.LogInformation("Chat segment {Index}/{Total} complete", i + 1, segmentCount);
-                yield return $"Chat segment {i + 1}/{segmentCount} complete";
+                    if (attempt > 0)
+                    {
+                        yield return $"Retrying chat segment {i + 1}/{segmentCount} (attempt {attempt + 1}/{maxSegmentAttempts})";
+                        _logger.LogWarning("Retrying chat segment {Index}/{Total}, attempt {Attempt}/{MaxAttempts}",
+                            i + 1, segmentCount, attempt + 1, maxSegmentAttempts);
+                    }
+
+                    // Remove any leftover .tmp file from a previous attempt.
+                    if (File.Exists(segmentTmpFile))
+                        File.Delete(segmentTmpFile);
+
+                    // Wipe and recreate the per-segment temp dir to guarantee a clean emote cache.
+                    if (Directory.Exists(segTempDir))
+                        Directory.Delete(segTempDir, recursive: true);
+                    Directory.CreateDirectory(segTempDir);
+
+                    string segArguments =
+                        $"chatrender -i \"{chatFile.FullName}\" --temp-path \"{segTempDir}\" " +
+                        $"-o \"{segmentTmpFile}\" --collision overwrite " +
+                        $"--framerate {fps.ToString(CultureInfo.InvariantCulture)} --chat-height {height} " +
+                        $"--chat-width {chatWidth} --font-size {fontSize} --update-rate {updateRate} " +
+                        $"--ffmpeg-path \"{_ffmpegPath}\" -b {beginningArg} -e {endingArg}";
+
+                    yield return $"Rendering chat segment {i + 1}/{segmentCount}";
+
+                    // Buffer status messages: yield return is not permitted inside a try/catch block,
+                    // so we collect them here and yield them after the try/catch completes.
+                    var buffered = new List<string>();
+                    lastSegmentException = null;
+                    try
+                    {
+                        await foreach (var status in RunTwitchDownloaderCliAsync(segArguments, $"chat segment {i + 1}/{segmentCount}", cancellationToken))
+                            buffered.Add(status);
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        lastSegmentException = ex;
+                    }
+                    finally
+                    {
+                        try { Directory.Delete(segTempDir, recursive: true); }
+                        catch (Exception ex) { _logger.LogDebug(ex, "Failed to remove segment temp directory {Path}", segTempDir); }
+                    }
+
+                    foreach (var s in buffered)
+                        yield return s;
+
+                    if (lastSegmentException == null)
+                    {
+                        // Atomic promotion: only a fully-rendered segment is used for resume detection.
+                        File.Move(segmentTmpFile, segmentFile);
+                        _logger.LogInformation("Chat segment {Index}/{Total} complete", i + 1, segmentCount);
+                        yield return $"Chat segment {i + 1}/{segmentCount} complete";
+                        break;
+                    }
+
+                    if (File.Exists(segmentTmpFile))
+                        File.Delete(segmentTmpFile);
+
+                    _logger.LogWarning(lastSegmentException,
+                        "Chat segment {Index}/{Total} attempt {Attempt}/{MaxAttempts} failed",
+                        i + 1, segmentCount, attempt + 1, maxSegmentAttempts);
+                }
+
+                if (lastSegmentException != null)
+                    throw new InvalidOperationException(
+                        $"Chat segment {i + 1}/{segmentCount} failed after {maxSegmentAttempts} attempt(s).", lastSegmentException);
             }
 
             // Concatenate all segments into the final output without re-encoding.
