@@ -21,5 +21,11 @@ namespace Vod2Tube.Domain
         public int FailCount { get; set; } = 0;
 
         public bool Paused { get; set; } = false;
+
+        /// <summary>Percentage complete of the current stage (0–100), or <c>null</c> when indeterminate.</summary>
+        public double? PercentComplete { get; set; }
+
+        /// <summary>Estimated minutes remaining for the current stage, or <c>null</c> when unknown.</summary>
+        public double? EstimatedMinutesRemaining { get; set; }
     }
 }
