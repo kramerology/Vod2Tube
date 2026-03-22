@@ -5,6 +5,7 @@ using TUnit.Core;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
 using Vod2Tube.Application;
+using Vod2Tube.Application.Models;
 using Vod2Tube.Domain;
 using Vod2Tube.Infrastructure;
 
@@ -607,7 +608,7 @@ public class JobManagerTests
             _ctx = ctx;
         }
 
-        public override async IAsyncEnumerable<string> RunAsync(string vodId,
+        public override async IAsyncEnumerable<ProgressStatus> RunAsync(string vodId,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
         {
             // Simulate an external pause being written to the database before the first progress update.
@@ -617,7 +618,7 @@ public class JobManagerTests
                 pipeline.Paused = true;
                 await _ctx.SaveChangesAsync(ct);
             }
-            yield return "Downloading 1%";
+            yield return ProgressStatus.Indeterminate("Downloading 1%");
         }
     }
 
@@ -628,7 +629,7 @@ public class JobManagerTests
     {
         public ThrowingVodDownloader() : base(null!) { }
 
-        public override IAsyncEnumerable<string> RunAsync(string vodId, CancellationToken ct)
+        public override IAsyncEnumerable<ProgressStatus> RunAsync(string vodId, CancellationToken ct)
             => throw new InvalidOperationException("Simulated download failure");
     }
 
@@ -640,7 +641,7 @@ public class JobManagerTests
     {
         public PermanentlyFailingVodDownloader() : base(null!) { }
 
-        public override IAsyncEnumerable<string> RunAsync(string vodId, CancellationToken ct)
+        public override IAsyncEnumerable<ProgressStatus> RunAsync(string vodId, CancellationToken ct)
             => throw new PipelineJobException("Simulated permanent failure", isPermanent: true);
     }
 
@@ -651,10 +652,10 @@ public class JobManagerTests
     {
         public StubVideoUploader() : base(null!) { }
 
-        public override async IAsyncEnumerable<string> RunAsync(string vodId, string finalFilePath,
+        public override async IAsyncEnumerable<ProgressStatus> RunAsync(string vodId, string finalFilePath,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
         {
-            yield return "Stub upload complete";
+            yield return ProgressStatus.Indeterminate("Stub upload complete");
         }
     }
 
@@ -744,7 +745,7 @@ public class JobManagerTests
             _ctx = ctx;
         }
 
-        public override async IAsyncEnumerable<string> RunAsync(string vodId,
+        public override async IAsyncEnumerable<ProgressStatus> RunAsync(string vodId,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
         {
             // Simulate an external cancellation being written to the database before the first progress update.
@@ -754,7 +755,7 @@ public class JobManagerTests
                 pipeline.Stage = "Cancelled";
                 await _ctx.SaveChangesAsync(ct);
             }
-            yield return "Downloading 1%";
+            yield return ProgressStatus.Indeterminate("Downloading 1%");
         }
     }
 }

@@ -3,7 +3,7 @@ import {
   vodsApi,
   type PipelineJob,
   isActive, isPending, isCompleted, isFailed,
-  formatDuration, stageLabel,
+  formatDuration, stageLabel, formatEta,
 } from '../api/client';
 
 // ── Stage colour / icon map ───────────────────────────────────────────────────
@@ -119,7 +119,7 @@ function JobCard({
         </div>
 
         {/* Description / progress hint */}
-        {job.description && (
+        {job.description && job.percentComplete == null && (
           <p className="text-xs text-on-surface-variant mb-3 line-clamp-1">{job.description}</p>
         )}
 
@@ -134,7 +134,26 @@ function JobCard({
         {isActive(job) && (
           <div className="mb-4">
             <div className="h-1.5 w-full bg-surface-variant rounded-full overflow-hidden">
-              <div className="h-full bg-gradient-to-r from-secondary to-on-secondary-container rounded-full animate-pulse w-full" />
+              {job.percentComplete != null ? (
+                <div
+                  className="h-full bg-gradient-to-r from-secondary to-on-secondary-container rounded-full transition-all duration-500"
+                  style={{ width: `${Math.min(job.percentComplete, 100)}%` }}
+                />
+              ) : (
+                <div className="h-full bg-gradient-to-r from-secondary to-on-secondary-container rounded-full animate-pulse w-full" />
+              )}
+            </div>
+            <div className="flex items-center justify-between mt-1">
+              {job.percentComplete != null && (
+                <span className="text-[10px] font-mono text-on-surface-variant">
+                  {job.percentComplete.toFixed(1)}%
+                </span>
+              )}
+              {job.estimatedMinutesRemaining != null && (
+                <span className="text-[10px] font-mono text-on-surface-variant ml-auto">
+                  ETA: {formatEta(job.estimatedMinutesRemaining)}
+                </span>
+              )}
             </div>
           </div>
         )}

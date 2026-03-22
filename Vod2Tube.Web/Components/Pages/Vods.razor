@@ -92,6 +92,24 @@
                         @context.Item.Description
                     </MudText>
                 }
+                @if (IsActiveJob(context.Item) && context.Item.PercentComplete.HasValue)
+                {
+                    <MudProgressLinear Color="@GetStageColor(context.Item)" Value="@context.Item.PercentComplete.Value"
+                        Max="100" Class="mt-1" Rounded="true" Size="Size.Small">
+                        <small>@($"{context.Item.PercentComplete.Value:F1}%")</small>
+                    </MudProgressLinear>
+                    @if (context.Item.EstimatedMinutesRemaining.HasValue)
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary mt-1">
+                            ETA: @FormatEta(context.Item.EstimatedMinutesRemaining.Value)
+                        </MudText>
+                    }
+                }
+                else if (IsActiveJob(context.Item))
+                {
+                    <MudProgressLinear Indeterminate="true" Color="@GetStageColor(context.Item)" Class="mt-1"
+                        Rounded="true" Size="Size.Small" />
+                }
                 @if (!string.IsNullOrWhiteSpace(context.Item.FailReason) && context.Item.Failed)
                 {
                     <MudAlert Severity="Severity.Error" Dense="true" Class="mt-1">
@@ -407,6 +425,15 @@
         if (ts.TotalHours >= 1)
             return $"{(int)ts.TotalHours}h {ts.Minutes}m";
         return $"{ts.Minutes}m {ts.Seconds}s";
+    }
+
+    private static string FormatEta(double minutes)
+    {
+        if (minutes < 1) return "< 1 min";
+        if (minutes < 60) return $"~{(int)Math.Ceiling(minutes)} min";
+        int hours = (int)(minutes / 60);
+        int mins = (int)Math.Ceiling(minutes % 60);
+        return $"~{hours}h {mins}m";
     }
 
     private static string GetRowClass(PipelineJobDto job, int _)

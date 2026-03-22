@@ -1,3 +1,5 @@
+using Vod2Tube.Application.Models;
+
 namespace Vod2Tube.Application
 {
     public class ChatDownloader
@@ -20,7 +22,7 @@ namespace Vod2Tube.Application
         public string GetOutputPath(string vodId) =>
             Path.Combine(FinalDir.FullName, $"{vodId}.json");
 
-        public IAsyncEnumerable<string> RunAsync(string vodId, CancellationToken ct) =>
+        public IAsyncEnumerable<ProgressStatus> RunAsync(string vodId, CancellationToken ct) =>
             _downloadService.DownloadChatNewAsync(vodId, TempDir, new FileInfo(GetOutputPath(vodId)), ct);
     }
 }

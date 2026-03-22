@@ -172,6 +172,8 @@ namespace Vod2Tube.Application.Services
                 FailReason = pipeline.FailReason,
                 FailCount = pipeline.FailCount,
                 YoutubeVideoId = pipeline.YoutubeVideoId,
+                PercentComplete = pipeline.PercentComplete,
+                EstimatedMinutesRemaining = pipeline.EstimatedMinutesRemaining,
                 Title = vod?.Title ?? pipeline.VodId,
                 ChannelName = vod?.ChannelName ?? string.Empty,
                 CreatedAtUTC = vod?.CreatedAtUTC ?? DateTime.MinValue,

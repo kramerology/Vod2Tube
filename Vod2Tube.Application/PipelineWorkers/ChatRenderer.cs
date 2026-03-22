@@ -1,3 +1,5 @@
+using Vod2Tube.Application.Models;
+
 namespace Vod2Tube.Application
 {
     public class ChatRenderer
@@ -19,7 +21,7 @@ namespace Vod2Tube.Application
         public string GetOutputPath(string vodId) =>
             Path.Combine(FinalDir.FullName, $"{vodId}_chat.mp4");
 
-        public IAsyncEnumerable<string> RunAsync(string vodId, string chatFilePath, string vodFilePath, CancellationToken ct) =>
+        public IAsyncEnumerable<ProgressStatus> RunAsync(string vodId, string chatFilePath, string vodFilePath, CancellationToken ct) =>
             _downloadService.RenderChatVideoAsync(new FileInfo(chatFilePath), new FileInfo(vodFilePath), TempDir, new FileInfo(GetOutputPath(vodId)), ct);
     }
 }
