@@ -1,7 +1,8 @@
-using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
 using Google.Apis.Auth.OAuth2;
+using Google.Apis.Auth.OAuth2.Flows;
+using Google.Apis.Auth.OAuth2.Responses;
 using Google.Apis.Services;
 using Google.Apis.Upload;
 using Google.Apis.Util.Store;
@@ -28,12 +29,23 @@ namespace Vod2Tube.Application
         private readonly AppDbContext _dbContext;
         private static readonly string[] Scopes = { YouTubeService.Scope.YoutubeUpload };
         private static readonly string ApplicationName = "Vod2Tube";
-        private static readonly DirectoryInfo CredentialsDir = new("YouTubeCredentials");
+
+        /// <summary>
+        /// Credentials directory stored under <c>%LOCALAPPDATA%\Vod2Tube\YouTubeCredentials</c>
+        /// so that all entry points (Web, Api, Console) share the same token store regardless
+        /// of their working directory.
+        /// </summary>
+        private static readonly DirectoryInfo CredentialsDir = new(
+            Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "Vod2Tube",
+                "YouTubeCredentials"));
 
         static VideoUploader()
         {
             CredentialsDir.Create();
         }
+
         public VideoUploader(AppDbContext dbContext)
         {
             _dbContext = dbContext;
@@ -205,26 +217,74 @@ namespace Vod2Tube.Application
             if (!File.Exists(clientSecretsPath))
             {
                 throw new FileNotFoundException(
-                    $"YouTube OAuth credentials not found. Please create a file at '{clientSecretsPath}' with your OAuth 2.0 client secrets from Google Cloud Console. " +
-                    $"Visit https://console.cloud.google.com/apis/credentials to create OAuth 2.0 credentials."
-                );
+                    $"YouTube OAuth credentials not found. Please place your OAuth 2.0 client secrets file at:\n" +
+                    $"  {clientSecretsPath}\n\n" +
+                    $"Visit https://console.cloud.google.com/apis/credentials to create OAuth 2.0 credentials.");
             }
 
-            UserCredential credential;
+            GoogleClientSecrets clientSecrets;
             using (var stream = new FileStream(clientSecretsPath, FileMode.Open, FileAccess.Read))
             {
-                credential = await GoogleWebAuthorizationBroker.AuthorizeAsync(
-                    GoogleClientSecrets.FromStream(stream).Secrets,
-                    Scopes,
-                    "user",
-                    ct,
-                    new FileDataStore(Path.Combine(CredentialsDir.FullName, "token_store"), true)
-                );
+                clientSecrets = GoogleClientSecrets.FromStream(stream);
             }
+
+            var tokenStorePath = Path.Combine(CredentialsDir.FullName, "token_store");
+            var tokenStore = new FileDataStore(tokenStorePath, fullPath: true);
+
+            // Check if a token already exists in the store.
+            var existingToken = await tokenStore.GetAsync<TokenResponse>("user");
+
+            if (existingToken != null)
+            {
+                // Build a credential from the stored token without opening a browser.
+                var flow = new GoogleAuthorizationCodeFlow(new GoogleAuthorizationCodeFlow.Initializer
+                {
+                    ClientSecrets = clientSecrets.Secrets,
+                    Scopes = Scopes,
+                    DataStore = tokenStore,
+                });
+
+                var credential = new UserCredential(flow, "user", existingToken);
+
+                // If the access token is expired, explicitly refresh it.
+                // GoogleWebAuthorizationBroker.AuthorizeAsync would silently open a browser
+                // when refresh fails — here we throw a clear error instead.
+                if (credential.Token.IsStale)
+                {
+                    if (!await credential.RefreshTokenAsync(ct))
+                    {
+                        // The refresh token is no longer valid.  Delete the stale entry so the
+                        // next invocation can perform a clean interactive auth.
+                        await tokenStore.DeleteAsync<TokenResponse>("user");
+
+                        throw new InvalidOperationException(
+                            "YouTube OAuth token has expired and could not be refreshed. " +
+                            "This commonly happens when the Google Cloud project's OAuth consent screen " +
+                            "is in \"Testing\" mode (refresh tokens expire after 7 days). Either:\n" +
+                            "  1. Publish your OAuth consent screen in Google Cloud Console, or\n" +
+                            "  2. Restart the application — you will be prompted to re-authenticate once.\n\n" +
+                            $"Token store: {tokenStorePath}");
+                    }
+                }
+
+                return new YouTubeService(new BaseClientService.Initializer
+                {
+                    HttpClientInitializer = credential,
+                    ApplicationName = ApplicationName
+                });
+            }
+
+            // No stored token — perform one-time interactive authorization via browser.
+            var newCredential = await GoogleWebAuthorizationBroker.AuthorizeAsync(
+                clientSecrets.Secrets,
+                Scopes,
+                "user",
+                ct,
+                tokenStore);
 
             return new YouTubeService(new BaseClientService.Initializer
             {
-                HttpClientInitializer = credential,
+                HttpClientInitializer = newCredential,
                 ApplicationName = ApplicationName
             });
         }
