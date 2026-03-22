@@ -361,7 +361,8 @@ namespace Vod2Tube.Application
 
         /// <summary>
         /// Runs TwitchDownloaderCLI with the given <paramref name="arguments"/>, yielding
-        /// <c>[STATUS]</c> progress strings as they are emitted.
+        /// <see cref="ProgressStatus"/> objects as progress is emitted. Each object contains
+        /// a message and an optional numeric progress value parsed from <c>[STATUS]</c> output lines.
         /// Throws <see cref="InvalidOperationException"/> if the process exits with a non-zero code.
         /// The process is killed when <paramref name="cancellationToken"/> is cancelled.
         /// </summary>
