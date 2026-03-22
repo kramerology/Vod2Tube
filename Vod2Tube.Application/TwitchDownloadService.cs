@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
@@ -9,6 +9,7 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using Vod2Tube.Application.Models;
 
 namespace Vod2Tube.Application
 {
@@ -81,6 +82,68 @@ namespace Vod2Tube.Application
         internal static bool IsValidVodId(string? vodId) =>
             !string.IsNullOrWhiteSpace(vodId) && Regex.IsMatch(vodId, @"^[a-zA-Z0-9_-]+$");
 
+        /// <summary>
+        /// Estimates the minutes remaining for a segmented operation given elapsed time and progress so far.
+        /// Returns <c>null</c> when no segments have completed yet.
+        /// </summary>
+        internal static double? EstimateMinutesRemaining(Stopwatch elapsed, int completedItems, int totalItems)
+        {
+            if (completedItems <= 0 || totalItems <= 0)
+                return null;
+            int remaining = totalItems - completedItems;
+            if (remaining <= 0)
+                return 0;
+            double minutesPerItem = elapsed.Elapsed.TotalMinutes / completedItems;
+            return minutesPerItem * remaining;
+        }
+
+        /// <summary>
+        /// Parses yt-dlp percentage and ETA from a progress line like
+        /// <c>10.0% of 1.20GiB at 5.00MiB/s ETA 00:03:45 (frag 10/100)</c>.
+        /// </summary>
+        internal static (double? percent, double? etaMinutes) ParseYtDlpProgress(string progressLine)
+        {
+            double? percent = null;
+            double? etaMinutes = null;
+
+            var pctMatch = Regex.Match(progressLine, @"([\d.]+)%");
+            if (pctMatch.Success && double.TryParse(pctMatch.Groups[1].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var pct))
+                percent = pct;
+
+            var etaMatch = Regex.Match(progressLine, @"ETA\s+(\d+):(\d+):(\d+)");
+            if (etaMatch.Success)
+            {
+                int h = int.Parse(etaMatch.Groups[1].Value);
+                int m = int.Parse(etaMatch.Groups[2].Value);
+                int s = int.Parse(etaMatch.Groups[3].Value);
+                etaMinutes = h * 60 + m + s / 60.0;
+            }
+            else
+            {
+                var etaShortMatch = Regex.Match(progressLine, @"ETA\s+(\d+):(\d+)");
+                if (etaShortMatch.Success)
+                {
+                    int m = int.Parse(etaShortMatch.Groups[1].Value);
+                    int s = int.Parse(etaShortMatch.Groups[2].Value);
+                    etaMinutes = m + s / 60.0;
+                }
+            }
+
+            return (percent, etaMinutes);
+        }
+
+        /// <summary>
+        /// Parses TwitchDownloaderCLI chat download progress from a line like
+        /// <c>Downloading 50.00% [250/500]</c>.
+        /// </summary>
+        internal static double? ParseChatDownloadPercent(string statusText)
+        {
+            var pctMatch = Regex.Match(statusText, @"([\d.]+)%");
+            if (pctMatch.Success && double.TryParse(pctMatch.Groups[1].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var pct))
+                return pct;
+            return null;
+        }
+
 
         /// <summary>
         /// Renders the chat JSON file into an MP4 video using TwitchDownloaderCLI.
@@ -88,7 +151,7 @@ namespace Vod2Tube.Application
         /// resumed without re-rendering segments that already exist on disk.  All completed
         /// segments are concatenated into <paramref name="finalFile"/> at the end.
         /// </summary>
-        public async IAsyncEnumerable<string> RenderChatVideoAsync(
+        public async IAsyncEnumerable<ProgressStatus> RenderChatVideoAsync(
             FileInfo chatFile,
             FileInfo vodFile,
             DirectoryInfo tempDir,
@@ -122,9 +185,10 @@ namespace Vod2Tube.Application
                 Path.GetFileNameWithoutExtension(finalFile.Name) + "_chat_segments");
             Directory.CreateDirectory(segmentsDir);
 
-            yield return $"Rendering chat in {estimatedSegmentCount} segment(s)";
+            yield return ProgressStatus.WithProgress($"Rendering chat in {estimatedSegmentCount} segment(s)", 0);
 
             var segmentFiles = new List<string>();
+            var renderStopwatch = Stopwatch.StartNew();
 
             const int maxSegmentAttempts = 3;
             int segmentIndex = 0;
@@ -162,7 +226,9 @@ namespace Vod2Tube.Application
                 if (File.Exists(segmentFile))
                 {
                     _logger.LogInformation("Chat segment {Index}/{Total} already exists, skipping", displayNum, estimatedSegmentCount);
-                    yield return $"Chat segment {displayNum}/{estimatedSegmentCount} already rendered, skipping";
+                    yield return ProgressStatus.WithProgress(
+                        $"Chat segment {displayNum}/{estimatedSegmentCount} already rendered, skipping",
+                        (double)displayNum / estimatedSegmentCount * 100);
                     continue;
                 }
 
@@ -183,7 +249,9 @@ namespace Vod2Tube.Application
 
                     if (attempt > 0)
                     {
-                        yield return $"Retrying chat segment {displayNum}/{estimatedSegmentCount} (attempt {attempt + 1}/{maxSegmentAttempts})";
+                        yield return ProgressStatus.WithProgress(
+                            $"Retrying chat segment {displayNum}/{estimatedSegmentCount} (attempt {attempt + 1}/{maxSegmentAttempts})",
+                            (double)segmentIndex / estimatedSegmentCount * 100);
                         _logger.LogWarning("Retrying chat segment {Index}/{Total}, attempt {Attempt}/{MaxAttempts}",
                             displayNum, estimatedSegmentCount, attempt + 1, maxSegmentAttempts);
                     }
@@ -204,11 +272,14 @@ namespace Vod2Tube.Application
                         $"--chat-width {chatWidth} --font-size {fontSize} --update-rate {updateRate} " +
                         $"--ffmpeg-path \"{_ffmpegPath}\" -b {beginningArg} -e {endingArg}";
 
-                    yield return $"Rendering chat segment {displayNum}/{estimatedSegmentCount}";
+                    yield return ProgressStatus.WithProgress(
+                        $"Rendering chat segment {displayNum}/{estimatedSegmentCount}",
+                        (double)segmentIndex / estimatedSegmentCount * 100,
+                        EstimateMinutesRemaining(renderStopwatch, segmentIndex, estimatedSegmentCount));
 
                     // Buffer status messages: yield return is not permitted inside a try/catch block,
                     // so we collect them here and yield them after the try/catch completes.
-                    var buffered = new List<string>();
+                    var buffered = new List<ProgressStatus>();
                     lastSegmentException = null;
                     try
                     {
@@ -233,7 +304,10 @@ namespace Vod2Tube.Application
                         // Atomic promotion: only a fully-rendered segment is used for resume detection.
                         File.Move(segmentTmpFile, segmentFile);
                         _logger.LogInformation("Chat segment {Index}/{Total} complete", displayNum, estimatedSegmentCount);
-                        yield return $"Chat segment {displayNum}/{estimatedSegmentCount} complete";
+                        yield return ProgressStatus.WithProgress(
+                            $"Chat segment {displayNum}/{estimatedSegmentCount} complete",
+                            (double)displayNum / estimatedSegmentCount * 100,
+                            EstimateMinutesRemaining(renderStopwatch, displayNum, estimatedSegmentCount));
                         break;
                     }
 
@@ -251,7 +325,7 @@ namespace Vod2Tube.Application
             }
 
             // Concatenate all segments into the final output without re-encoding.
-            yield return "Concatenating chat segments into final video";
+            yield return ProgressStatus.WithProgress("Concatenating chat segments into final video", 95);
 
             string concatListPath = Path.Combine(segmentsDir, "concat_list.txt");
             // ffmpeg concat demuxer requires forward-slash paths on all platforms.
@@ -282,7 +356,7 @@ namespace Vod2Tube.Application
             try { Directory.Delete(segmentsDir, recursive: true); }
             catch (Exception ex) { _logger.LogDebug(ex, "Failed to remove chat segments directory {Path}", segmentsDir); }
 
-            yield return "Done rendering chat video";
+            yield return ProgressStatus.WithProgress("Done rendering chat video", 100);
         }
 
         /// <summary>
@@ -291,7 +365,7 @@ namespace Vod2Tube.Application
         /// Throws <see cref="InvalidOperationException"/> if the process exits with a non-zero code.
         /// The process is killed when <paramref name="cancellationToken"/> is cancelled.
         /// </summary>
-        private async IAsyncEnumerable<string> RunTwitchDownloaderCliAsync(
+        private async IAsyncEnumerable<ProgressStatus> RunTwitchDownloaderCliAsync(
             string arguments,
             string errorContext,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -311,7 +385,7 @@ namespace Vod2Tube.Application
             using var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
 
             var statusRegex  = new Regex(@"^\[STATUS\] - (.*?)$");
-            var statusQueue  = new System.Collections.Concurrent.ConcurrentQueue<string>();
+            var statusQueue  = new System.Collections.Concurrent.ConcurrentQueue<ProgressStatus>();
             var errorOutput  = new StringBuilder();
 
             process.OutputDataReceived += (_, e) =>
@@ -319,7 +393,7 @@ namespace Vod2Tube.Application
                 if (string.IsNullOrEmpty(e.Data)) return;
                 var match = statusRegex.Match(e.Data);
                 if (match.Success)
-                    statusQueue.Enqueue(match.Groups[1].Value);
+                    statusQueue.Enqueue(ProgressStatus.Indeterminate(match.Groups[1].Value));
             };
 
             process.ErrorDataReceived += (_, e) =>
@@ -387,7 +461,7 @@ namespace Vod2Tube.Application
             }
         }
 
-        public async IAsyncEnumerable<string> DownloadVodNewAsync(string vodId, DirectoryInfo tempDir, FileInfo finalFile, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        public async IAsyncEnumerable<ProgressStatus> DownloadVodNewAsync(string vodId, DirectoryInfo tempDir, FileInfo finalFile, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             // Validate vodId before use in a URL to prevent malformed requests.
             if (!IsValidVodId(vodId))
@@ -434,7 +508,7 @@ namespace Vod2Tube.Application
             // yt-dlp progress lines look like:
             //   [download]  10.0% of 1.20GiB at 5.00MiB/s ETA 00:03:45 (frag 10/100)
             var progressRegex = new Regex(@"^\[download\]\s+(.+)$", RegexOptions.Compiled);
-            var statusQueue = new System.Collections.Concurrent.ConcurrentQueue<string>();
+            var statusQueue = new System.Collections.Concurrent.ConcurrentQueue<ProgressStatus>();
             var errorOutput = new StringBuilder();
 
             process.OutputDataReceived += (sender, e) =>
@@ -443,7 +517,12 @@ namespace Vod2Tube.Application
                 var match = progressRegex.Match(e.Data);
                 if (match.Success)
                 {
-                    statusQueue.Enqueue(match.Groups[1].Value);
+                    string line = match.Groups[1].Value;
+                    var (pct, eta) = ParseYtDlpProgress(line);
+                    if (pct.HasValue)
+                        statusQueue.Enqueue(ProgressStatus.WithProgress("Downloading VOD", pct.Value, eta));
+                    else
+                        statusQueue.Enqueue(ProgressStatus.Indeterminate(line));
                 }
             };
 
@@ -572,10 +651,10 @@ namespace Vod2Tube.Application
         }
 
         /// <summary>
-        /// Runs ffmpeg with the given arguments, yielding progress status strings.
+        /// Runs ffmpeg with the given arguments, yielding progress status objects.
         /// Throws <see cref="InvalidOperationException"/> if ffmpeg exits with a non-zero code.
         /// </summary>
-        private async IAsyncEnumerable<string> RunFfmpegAsync(string arguments, string errorContext,
+        private async IAsyncEnumerable<ProgressStatus> RunFfmpegAsync(string arguments, string errorContext,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             var psi = new ProcessStartInfo
@@ -594,7 +673,7 @@ namespace Vod2Tube.Application
 
             // ffmpeg writes progress lines to stderr in the form:
             //   frame=  100 fps= 60 q=28.0 size=  2048kB time=00:00:01.67 ...
-            var statusQueue = new System.Collections.Concurrent.ConcurrentQueue<string>();
+            var statusQueue = new System.Collections.Concurrent.ConcurrentQueue<ProgressStatus>();
             var errorOutput = new StringBuilder();
 
             process.ErrorDataReceived += (_, e) =>
@@ -603,7 +682,7 @@ namespace Vod2Tube.Application
                 errorOutput.AppendLine(e.Data);
                 var match = _ffmpegProgressRegex.Match(e.Data);
                 if (match.Success)
-                    statusQueue.Enqueue($"Encoding frame {match.Groups[1].Value}, time {match.Groups[2].Value}");
+                    statusQueue.Enqueue(ProgressStatus.Indeterminate($"Encoding frame {match.Groups[1].Value}, time {match.Groups[2].Value}"));
             };
 
             process.Start();
@@ -699,7 +778,7 @@ namespace Vod2Tube.Application
             throw new FormatException($"Unable to parse duration from ffprobe output: '{output}' for file: {filePath}");
         }
 
-        public async IAsyncEnumerable<string> CombineVideosAsync(FileInfo vodFile, FileInfo chatVideoFile, FileInfo outputFile, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        public async IAsyncEnumerable<ProgressStatus> CombineVideosAsync(FileInfo vodFile, FileInfo chatVideoFile, FileInfo outputFile, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             if (!File.Exists(vodFile.FullName))
                 throw new FileNotFoundException($"VOD file not found: {vodFile.FullName}");
@@ -730,9 +809,10 @@ namespace Vod2Tube.Application
                 Path.GetFileNameWithoutExtension(outputFile.Name) + "_segments");
             Directory.CreateDirectory(segmentsDir);
 
-            yield return $"Combining videos using {encoder} in {segmentCount} segment(s)";
+            yield return ProgressStatus.WithProgress($"Combining videos using {encoder} in {segmentCount} segment(s)", 0);
 
             var segmentFiles = new List<string>(segmentCount);
+            var combineStopwatch = Stopwatch.StartNew();
 
             for (int i = 0; i < segmentCount; i++)
             {
@@ -758,7 +838,9 @@ namespace Vod2Tube.Application
                 if (File.Exists(segmentFile))
                 {
                     _logger.LogInformation("Segment {Index}/{Total} already exists, skipping", i + 1, segmentCount);
-                    yield return $"Segment {i + 1}/{segmentCount} already rendered, skipping";
+                    yield return ProgressStatus.WithProgress(
+                        $"Segment {i + 1}/{segmentCount} already rendered, skipping",
+                        (double)(i + 1) / segmentCount * 100);
                     continue;
                 }
 
@@ -778,18 +860,24 @@ namespace Vod2Tube.Application
                     $"-filter_complex \"[0:v][1:v]hstack=inputs=2,format={pixelFormat}\" " +
                     $"{encoderArgs} -c:a copy -f mp4 \"{segmentTmpFile}\"";
 
-                yield return $"Encoding segment {i + 1}/{segmentCount}";
+                yield return ProgressStatus.WithProgress(
+                    $"Encoding segment {i + 1}/{segmentCount}",
+                    (double)i / segmentCount * 100,
+                    EstimateMinutesRemaining(combineStopwatch, i, segmentCount));
                 await foreach (var status in RunFfmpegAsync(segArguments, $"while encoding segment {i + 1}/{segmentCount}", cancellationToken))
                     yield return status;
 
                 // Atomic promotion: only the successfully-completed segment file is used for resume detection.
                 File.Move(segmentTmpFile, segmentFile);
                 _logger.LogInformation("Segment {Index}/{Total} complete", i + 1, segmentCount);
-                yield return $"Segment {i + 1}/{segmentCount} complete";
+                yield return ProgressStatus.WithProgress(
+                    $"Segment {i + 1}/{segmentCount} complete",
+                    (double)(i + 1) / segmentCount * 100,
+                    EstimateMinutesRemaining(combineStopwatch, i + 1, segmentCount));
             }
 
             // Concatenate all segments into the final output without re-encoding.
-            yield return "Concatenating segments into final video";
+            yield return ProgressStatus.WithProgress("Concatenating segments into final video", 95);
 
             string concatListPath = Path.Combine(segmentsDir, "concat_list.txt");
             // ffmpeg concat demuxer requires forward-slash paths on all platforms.
@@ -824,10 +912,10 @@ namespace Vod2Tube.Application
             }
             catch (Exception ex) { _logger.LogDebug(ex, "Failed to remove segments directory {Path}", segmentsDir); }
 
-            yield return "Done combining videos";
+            yield return ProgressStatus.WithProgress("Done combining videos", 100);
         }
 
-        public async IAsyncEnumerable<string> DownloadChatNewAsync(string vodId, DirectoryInfo tempDir, FileInfo finalFile, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        public async IAsyncEnumerable<ProgressStatus> DownloadChatNewAsync(string vodId, DirectoryInfo tempDir, FileInfo finalFile, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             string arguments = $"chatdownload --id \"{vodId}\" --temp-path \"{tempDir.FullName}\" -o \"{finalFile.FullName}\" --collision overwrite";
 
@@ -847,9 +935,10 @@ namespace Vod2Tube.Application
             using var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
 
             var regex = new Regex(@"^\[STATUS\] - (.*?) \[\d+/\d+\]$");
-            var statusQueue = new System.Collections.Concurrent.ConcurrentQueue<string>();
+            var statusQueue = new System.Collections.Concurrent.ConcurrentQueue<ProgressStatus>();
             var errorOutput = new StringBuilder();
             var outputReceived = new TaskCompletionSource<bool>();
+            var chatStopwatch = Stopwatch.StartNew();
 
             process.OutputDataReceived += (sender, e) =>
             {
@@ -857,7 +946,12 @@ namespace Vod2Tube.Application
                 var match = regex.Match(e.Data);
                 if (match.Success)
                 {
-                    statusQueue.Enqueue(match.Groups[1].Value);
+                    string statusText = match.Groups[1].Value;
+                    double? pct = ParseChatDownloadPercent(statusText);
+                    if (pct.HasValue)
+                        statusQueue.Enqueue(ProgressStatus.WithProgress("Downloading chat", pct.Value));
+                    else
+                        statusQueue.Enqueue(ProgressStatus.Indeterminate(statusText));
                 }
             };
 

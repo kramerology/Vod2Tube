@@ -1,4 +1,6 @@
-﻿namespace Vod2Tube.Application
+﻿using Vod2Tube.Application.Models;
+
+namespace Vod2Tube.Application
 {
     public class VodDownloader
     {
@@ -26,7 +28,7 @@
         public string GetOutputPath(string vodId) =>
             Path.Combine(FinalDir.FullName, $"{vodId}.mp4");
 
-        public virtual IAsyncEnumerable<string> RunAsync(string vodId, CancellationToken ct) =>
+        public virtual IAsyncEnumerable<ProgressStatus> RunAsync(string vodId, CancellationToken ct) =>
             _downloadService.DownloadVodNewAsync(vodId, TempDir, new FileInfo(GetOutputPath(vodId)), ct);
     }
 }

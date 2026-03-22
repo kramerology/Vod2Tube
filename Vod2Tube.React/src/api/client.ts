@@ -28,6 +28,8 @@ export interface PipelineJob {
   failReason: string;
   failCount: number;
   youtubeVideoId: string;
+  percentComplete: number | null;
+  estimatedMinutesRemaining: number | null;
   title: string;
   channelName: string;
   createdAtUTC: string;
@@ -116,4 +118,12 @@ export function stageLabel(j: PipelineJob): string {
   if (j.stage === 'Uploaded') return 'Uploaded';
   if (j.stage === 'Cancelled') return 'Cancelled';
   return j.stage.replace(/([A-Z])/g, ' $1').trim();
+}
+
+export function formatEta(minutes: number): string {
+  if (minutes < 1) return '< 1 min';
+  if (minutes < 60) return `~${Math.ceil(minutes)} min`;
+  const h = Math.floor(minutes / 60);
+  const m = Math.ceil(minutes % 60);
+  return `~${h}h ${m}m`;
 }
