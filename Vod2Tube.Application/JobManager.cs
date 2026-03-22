@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Vod2Tube.Application.Models;
 using Vod2Tube.Domain;
 using Vod2Tube.Infrastructure;
 
@@ -114,7 +115,16 @@ namespace Vod2Tube.Application
             if (job.Stage != stage)
                 job.FailCount = 0;
             job.Stage = stage;
+            job.PercentComplete = null;
+            job.EstimatedMinutesRemaining = null;
             await dbContext.SaveChangesAsync(ct);
+        }
+
+        private static void ApplyProgress(Pipeline job, ProgressStatus status)
+        {
+            job.Description = status.Message;
+            job.PercentComplete = status.PercentComplete;
+            job.EstimatedMinutesRemaining = status.EstimatedMinutesRemaining;
         }
 
         /// <summary>
@@ -257,9 +267,9 @@ namespace Vod2Tube.Application
                             if (DateTime.UtcNow - lastUpdate >= TimeSpan.FromSeconds(2))
                             {
                                 lastUpdate = DateTime.UtcNow;
-                                job.Description = status;
+                                ApplyProgress(job, status);
                                 using (logger.BeginScope(new Dictionary<string, object?> { ["IsProgress"] = true }))
-                                    logger.LogInformation("{Status}", status);
+                                    logger.LogInformation("{Status}", status.Message);
                                 try
                                 {
                                     await dbContext.SaveChangesAsync(ct);
@@ -307,9 +317,9 @@ namespace Vod2Tube.Application
                             if (DateTime.UtcNow - lastUpdate >= TimeSpan.FromSeconds(2))
                             {
                                 lastUpdate = DateTime.UtcNow;
-                                job.Description = status;
+                                ApplyProgress(job, status);
                                 using (logger.BeginScope(new Dictionary<string, object?> { ["IsProgress"] = true }))
-                                    logger.LogInformation("{Status}", status);
+                                    logger.LogInformation("{Status}", status.Message);
                                 try { await dbContext.SaveChangesAsync(ct); }
                                 catch (Exception ex) { logger.LogWarning(ex, "Failed to save progress for job {VodId}", job.VodId); }
                                 if (await DetectAndApplyPauseAsync(dbContext, job, logger, ct))
@@ -365,9 +375,9 @@ namespace Vod2Tube.Application
                             if (DateTime.UtcNow - lastUpdate >= TimeSpan.FromSeconds(2))
                             {
                                 lastUpdate = DateTime.UtcNow;
-                                job.Description = status;
+                                ApplyProgress(job, status);
                                 using (logger.BeginScope(new Dictionary<string, object?> { ["IsProgress"] = true }))
-                                    logger.LogInformation("{Status}", status);
+                                    logger.LogInformation("{Status}", status.Message);
                                 try { await dbContext.SaveChangesAsync(ct); }
                                 catch (Exception ex) { logger.LogWarning(ex, "Failed to save progress for job {VodId}", job.VodId); }
                                 if (await DetectAndApplyPauseAsync(dbContext, job, logger, ct))
@@ -423,9 +433,9 @@ namespace Vod2Tube.Application
                             if (DateTime.UtcNow - lastUpdate >= TimeSpan.FromSeconds(2))
                             {
                                 lastUpdate = DateTime.UtcNow;
-                                job.Description = status;
+                                ApplyProgress(job, status);
                                 using (logger.BeginScope(new Dictionary<string, object?> { ["IsProgress"] = true }))
-                                    logger.LogInformation("{Status}", status);
+                                    logger.LogInformation("{Status}", status.Message);
                                 try { await dbContext.SaveChangesAsync(ct); }
                                 catch (Exception ex) { logger.LogWarning(ex, "Failed to save progress for job {VodId}", job.VodId); }
                                 if (await DetectAndApplyPauseAsync(dbContext, job, logger, ct))
@@ -463,9 +473,9 @@ namespace Vod2Tube.Application
                         if (DateTime.UtcNow - lastUpdate >= TimeSpan.FromSeconds(2))
                         {
                             lastUpdate = DateTime.UtcNow;
-                            job.Description = status;
+                            ApplyProgress(job, status);
                             using (logger.BeginScope(new Dictionary<string, object?> { ["IsProgress"] = true }))
-                                logger.LogInformation("{Status}", status);
+                                logger.LogInformation("{Status}", status.Message);
                             try { await dbContext.SaveChangesAsync(ct); }
                             catch (Exception ex) { logger.LogWarning(ex, "Failed to save progress for job {VodId}", job.VodId); }
                         }

@@ -9,6 +9,7 @@ using Google.Apis.Util.Store;
 using Google.Apis.YouTube.v3;
 using Google.Apis.YouTube.v3.Data;
 using Microsoft.EntityFrameworkCore;
+using Vod2Tube.Application.Models;
 using Vod2Tube.Infrastructure;
 
 namespace Vod2Tube.Application
@@ -51,10 +52,10 @@ namespace Vod2Tube.Application
             _dbContext = dbContext;
         }
 
-        public virtual async IAsyncEnumerable<string> RunAsync(string vodId, string finalFilePath,
+        public virtual async IAsyncEnumerable<ProgressStatus> RunAsync(string vodId, string finalFilePath,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
         {
-            yield return "Initializing YouTube upload...";
+            yield return ProgressStatus.Indeterminate("Initializing YouTube upload...");
 
             if (!File.Exists(finalFilePath))
             {
@@ -78,10 +79,10 @@ namespace Vod2Tube.Application
                 options.Description = $"Twitch VOD {vodId}";               
             }
 
-            yield return "Authenticating with YouTube...";
+            yield return ProgressStatus.Indeterminate("Authenticating with YouTube...");
             var youtubeService = await GetYouTubeServiceAsync(ct);
 
-            yield return "Preparing video for upload...";
+            yield return ProgressStatus.Indeterminate("Preparing video for upload...");
             var video = new Video
             {
                 Snippet = new VideoSnippet
@@ -125,12 +126,12 @@ namespace Vod2Tube.Application
 
             if (!string.IsNullOrEmpty(savedUploadUri))
             {
-                yield return "Resuming interrupted upload...";
+                yield return ProgressStatus.Indeterminate("Resuming interrupted upload...");
                 uploadUri = new Uri(savedUploadUri);
             }
             else
             {
-                yield return "Initiating upload session...";
+                yield return ProgressStatus.Indeterminate("Initiating upload session...");
                 uploadUri = await videosInsertRequest.InitiateSessionAsync(ct);
 
                 // Persist the upload URI so the upload can be resumed if interrupted
@@ -151,13 +152,14 @@ namespace Vod2Tube.Application
                     }
 
                     if (saveWarning != null)
-                        yield return saveWarning;
+                        yield return ProgressStatus.Indeterminate(saveWarning);
                 }
             }
 
-            yield return $"Uploading video... 0%";
+            yield return ProgressStatus.WithProgress("Uploading video...", 0);
 
             var uploadTask = videosInsertRequest.ResumeAsync(uploadUri, ct);
+            var uploadStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
             while (!uploadTask.IsCompleted)
             {
@@ -168,18 +170,32 @@ namespace Vod2Tube.Application
                     double percentage = (double)lastBytesUploaded / totalBytes * 100;
                     double mbUploaded = lastBytesUploaded / (1024.0 * 1024.0);
                     double mbTotal = totalBytes / (1024.0 * 1024.0);
-                    yield return $"Uploading video... {percentage:F1}% ({mbUploaded:F1} MB / {mbTotal:F1} MB)";
+                    double? etaMinutes = null;
+                    if (lastBytesUploaded > 0)
+                    {
+                        double elapsedSeconds = uploadStopwatch.Elapsed.TotalSeconds;
+                        if (elapsedSeconds > 0)
+                        {
+                            double bytesPerSecond = lastBytesUploaded / elapsedSeconds;
+                            if (bytesPerSecond > 0)
+                                etaMinutes = (totalBytes - lastBytesUploaded) / bytesPerSecond / 60.0;
+                        }
+                    }
+                    yield return ProgressStatus.WithProgress(
+                        $"Uploading video... {percentage:F1}% ({mbUploaded:F1} MB / {mbTotal:F1} MB)",
+                        percentage, etaMinutes);
                 }
             }
 
             if (totalBytes > 0)
             {
                 double mbTotal = totalBytes / (1024.0 * 1024.0);
-                yield return $"Uploading video... 100.0% ({mbTotal:F1} MB / {mbTotal:F1} MB)";
+                yield return ProgressStatus.WithProgress(
+                    $"Uploading video... 100.0% ({mbTotal:F1} MB / {mbTotal:F1} MB)", 100);
             }
             else
             {
-                yield return "Uploading video... 100%";
+                yield return ProgressStatus.WithProgress("Uploading video... 100%", 100);
             }
 
             var uploadStatus = await uploadTask;
@@ -199,14 +215,14 @@ namespace Vod2Tube.Application
                 await _dbContext.SaveChangesAsync(ct);
             }
 
-            yield return "Upload completed successfully!";
+            yield return ProgressStatus.WithProgress("Upload completed successfully!", 100);
 
             // Add to playlist if specified
             if (!string.IsNullOrEmpty(options.PlaylistId) && !string.IsNullOrEmpty(uploadedVideoId))
             {
-                yield return "Adding video to playlist...";
+                yield return ProgressStatus.Indeterminate("Adding video to playlist...");
                 await AddVideoToPlaylistAsync(youtubeService, uploadedVideoId, options.PlaylistId, ct);
-                yield return "Video added to playlist!";
+                yield return ProgressStatus.WithProgress("Video added to playlist!", 100);
             }
         }
 
