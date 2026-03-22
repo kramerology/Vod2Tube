@@ -161,9 +161,13 @@ namespace Vod2Tube.Application
                     double? etaMinutes = null;
                     if (lastBytesUploaded > 0)
                     {
-                        double bytesPerSecond = lastBytesUploaded / uploadStopwatch.Elapsed.TotalSeconds;
-                        if (bytesPerSecond > 0)
-                            etaMinutes = (totalBytes - lastBytesUploaded) / bytesPerSecond / 60.0;
+                        double elapsedSeconds = uploadStopwatch.Elapsed.TotalSeconds;
+                        if (elapsedSeconds > 0)
+                        {
+                            double bytesPerSecond = lastBytesUploaded / elapsedSeconds;
+                            if (bytesPerSecond > 0)
+                                etaMinutes = (totalBytes - lastBytesUploaded) / bytesPerSecond / 60.0;
+                        }
                     }
                     yield return ProgressStatus.WithProgress(
                         $"Uploading video... {percentage:F1}% ({mbUploaded:F1} MB / {mbTotal:F1} MB)",
