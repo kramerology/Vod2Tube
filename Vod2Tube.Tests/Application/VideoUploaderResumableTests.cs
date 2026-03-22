@@ -3,6 +3,7 @@ using TUnit.Core;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
 using Vod2Tube.Application;
+using Vod2Tube.Application.Models;
 using Vod2Tube.Domain;
 using Vod2Tube.Infrastructure;
 
@@ -214,12 +215,12 @@ public class VideoUploaderResumableTests
             _ctx = ctx;
         }
 
-        public override async IAsyncEnumerable<string> RunAsync(
+        public override async IAsyncEnumerable<ProgressStatus> RunAsync(
             string vodId,
             string finalFilePath,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
         {
-            yield return "Initializing YouTube upload...";
+            yield return ProgressStatus.Indeterminate("Initializing YouTube upload...");
 
             var pipeline = await _ctx.Pipelines.FirstOrDefaultAsync(p => p.VodId == vodId, ct);
             string? savedUri = pipeline?.ResumableUploadUri;
@@ -229,7 +230,7 @@ public class VideoUploaderResumableTests
                 // Simulate the ResumeAsync path
                 WasResumed = true;
                 ResumedFromUri = savedUri;
-                yield return "Resuming interrupted upload...";
+                yield return ProgressStatus.Indeterminate("Resuming interrupted upload...");
             }
             else
             {
@@ -241,11 +242,11 @@ public class VideoUploaderResumableTests
                     UriWasStoredMidUpload = true;
                 }
 
-                yield return "Initiating upload session...";
+                yield return ProgressStatus.Indeterminate("Initiating upload session...");
                 // Simulate the ResumeAsync path for a brand-new session
             }
 
-            yield return "Uploading video... 100%";
+            yield return ProgressStatus.WithProgress("Uploading video... 100%", 100);
 
             // Simulate successful upload: clear the URI and set the video ID
             if (pipeline != null)
@@ -255,7 +256,7 @@ public class VideoUploaderResumableTests
                 await _ctx.SaveChangesAsync(ct);
             }
 
-            yield return "Upload completed successfully!";
+            yield return ProgressStatus.Indeterminate("Upload completed successfully!");
         }
     }
 }
