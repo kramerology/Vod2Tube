@@ -6,31 +6,27 @@ import {
   formatDuration, stageLabel, formatEta,
 } from '../api/client';
 
-// ── Stage colour / icon map ───────────────────────────────────────────────────
+// ── Status helpers ────────────────────────────────────────────────────────────
 
-function stageStyle(job: PipelineJob): { color: string; bg: string; border: string } {
-  if (job.failed)                     return { color: 'text-error',    bg: 'bg-error-container/15',    border: 'border-error/20' };
-  if (job.stage === 'Uploaded')       return { color: 'text-tertiary', bg: 'bg-tertiary-container/15', border: 'border-tertiary/20' };
-  if (job.stage === 'Cancelled')      return { color: 'text-on-surface-variant', bg: 'bg-surface-variant/40', border: 'border-outline-variant/20' };
-  if (isActive(job))                  return { color: 'text-secondary', bg: 'bg-secondary-container/15', border: 'border-secondary/20' };
-  if (isPending(job))                 return { color: 'text-primary',   bg: 'bg-primary-container/15',  border: 'border-primary/20' };
-  return { color: 'text-on-surface-variant', bg: 'bg-surface-variant/40', border: 'border-outline-variant/20' };
+function statusDot(job: PipelineJob): string {
+  if (job.failed) return 'bg-error';
+  if (isActive(job)) return 'bg-primary animate-pulse';
+  if (isPending(job)) return 'bg-on-secondary-container/30';
+  if (job.stage === 'Uploaded') return 'bg-emerald-500';
+  return 'bg-outline';
 }
 
-function stageIcon(job: PipelineJob): string {
-  if (job.failed)                        return 'error';
-  if (job.stage === 'Uploaded')          return 'check_circle';
-  if (job.stage === 'Cancelled')         return 'cancel';
-  if (job.stage.includes('Download'))    return 'download';
-  if (job.stage.includes('Chat'))        return 'chat';
-  if (job.stage.includes('Render') || job.stage.includes('Combin')) return 'movie';
-  if (job.stage.includes('Upload'))      return 'cloud_upload';
-  return 'hourglass_empty';
+function statusColor(job: PipelineJob): string {
+  if (job.failed) return 'text-error';
+  if (isActive(job)) return 'text-primary';
+  if (job.stage === 'Uploaded') return 'text-emerald-400';
+  if (job.stage === 'Cancelled') return 'text-on-surface-variant/50';
+  return 'text-on-secondary-container/50';
 }
 
-// ── VOD Job Card ──────────────────────────────────────────────────────────────
+// ── Queue Row ─────────────────────────────────────────────────────────────────
 
-function JobCard({
+function QueueRow({
   job,
   thumbnailUrl,
   onPause, onResume, onCancel, onRetry,
@@ -42,228 +38,141 @@ function JobCard({
   onCancel: () => void;
   onRetry: () => void;
 }) {
-  const s = stageStyle(job);
   const done = isCompleted(job);
-  const date = new Date(job.createdAtUTC).toLocaleDateString('en-US', {
-    month: 'short', day: 'numeric', year: 'numeric',
-  });
+  const failed = isFailed(job);
+  const active = isActive(job);
+  const pending = isPending(job);
 
   return (
-    <div
-      className={`bg-surface-container-high rounded-xl overflow-hidden group transition-all duration-300 ${
-        job.failed ? 'hover:ring-1 hover:ring-error/30' : 'hover:ring-1 hover:ring-primary/30'
-      } ${done && !job.failed ? 'opacity-70 hover:opacity-100' : ''}`}
-    >
-      {/* Thumbnail banner */}
-      <div className={`h-36 relative overflow-hidden ${done ? 'grayscale-[0.5]' : ''}`}>
-        {thumbnailUrl
-          ? <img src={thumbnailUrl} alt={job.title} className="absolute inset-0 w-full h-full object-cover" />
-          : <div
-              className="absolute inset-0"
-              style={{
-                background: job.failed
-                  ? 'linear-gradient(135deg, #93000a 0%, #2d3449 100%)'
-                  : isActive(job)
-                    ? 'linear-gradient(135deg, #ee9800 0%, #0b1326 100%)'
-                    : isPending(job)
-                      ? 'linear-gradient(135deg, #4d8eff 0%, #0b1326 100%)'
-                      : job.stage === 'Uploaded'
-                        ? 'linear-gradient(135deg, #00a572 0%, #0b1326 100%)'
-                        : 'linear-gradient(135deg, #424754 0%, #0b1326 100%)',
-              }}
+    <div className={`grid grid-cols-12 gap-4 px-6 py-5 hover:bg-white/[0.02] transition-colors items-center ${failed ? 'bg-error-container/5' : ''}`}>
+      {/* Media Asset & ID — col-span-5 */}
+      <div className="col-span-5 flex gap-4">
+        <div className="h-12 w-20 bg-surface-container-highest rounded-lg overflow-hidden flex-shrink-0 relative">
+          {thumbnailUrl ? (
+            <img
+              src={thumbnailUrl}
+              alt={job.title}
+              className={`w-full h-full object-cover ${failed ? 'grayscale opacity-20' : done ? 'grayscale opacity-50' : 'grayscale opacity-50'}`}
             />
-        }
-        <div className="absolute inset-0 bg-gradient-to-t from-surface-container-high via-transparent to-transparent" />
-
-        {/* Stage badge */}
-        <div className="absolute top-3 left-3">
-          <span className={`px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-wider border ${s.color} ${s.bg} ${s.border}`}>
-            {stageLabel(job)}
+          ) : pending ? (
+            <div className="w-full h-full flex items-center justify-center">
+              <span className="material-symbols-outlined text-on-surface-variant/30 text-3xl">timer</span>
+            </div>
+          ) : (
+            <div className="w-full h-full flex items-center justify-center">
+              <span className="material-symbols-outlined text-on-surface-variant/20 text-2xl">movie</span>
+            </div>
+          )}
+          {(active || thumbnailUrl) && !failed && <div className="absolute inset-0 bg-primary/10" />}
+        </div>
+        <div className="flex flex-col justify-center min-w-0">
+          <span className={`text-sm font-bold truncate ${failed ? 'text-error/90' : done ? 'text-on-surface-variant' : 'text-on-surface'}`}>
+            {job.title || job.vodId}
           </span>
-        </div>
-
-        {/* Paused badge */}
-        {job.paused && (
-          <div className="absolute top-3 right-3">
-            <span className="flex items-center gap-1 px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-wider bg-secondary-container/15 text-secondary border border-secondary/20">
-              <span className="material-symbols-outlined text-xs">pause</span>
-              Paused
-            </span>
-          </div>
-        )}
-
-        {/* Duration */}
-        <div className="absolute bottom-3 right-3 text-[10px] font-mono text-on-surface/60">
-          {formatDuration(job.duration)}
-        </div>
-
-        {/* Stage icon */}
-        <div className="absolute bottom-3 left-3">
-          <span className={`material-symbols-outlined text-xl ${s.color} opacity-80`}>
-            {stageIcon(job)}
+          <span className={`text-[10px] font-mono ${failed ? 'text-on-error-container/50' : 'text-on-surface-variant/70'}`}>
+            {job.channelName}{job.channelName && ' · '}{formatDuration(job.duration)}
           </span>
         </div>
       </div>
 
-      {/* Body */}
-      <div className="p-5">
-        <div className="mb-3">
-          <h3 className="font-bold text-base leading-tight mb-1 line-clamp-2" title={job.title}>
-            {job.title || job.vodId}
-          </h3>
-          <p className="text-xs text-on-surface-variant">
-            <span className="text-primary">{job.channelName}</span>
-            {job.channelName && ' · '}
-            {date}
-          </p>
+      {/* Status & Stage — col-span-2 */}
+      <div className="col-span-2">
+        {failed ? (
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <span className={`h-1.5 w-1.5 rounded-full ${statusDot(job)}`} />
+              <span className={`text-[11px] font-bold uppercase ${statusColor(job)}`}>{stageLabel(job)}</span>
+            </div>
+            {job.failReason && (
+              <span className="text-[9px] text-error/60 leading-tight line-clamp-1">{job.failReason}</span>
+            )}
+          </div>
+        ) : active ? (
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-2">
+              <span className={`h-1.5 w-1.5 rounded-full ${statusDot(job)}`} />
+              <span className={`text-[11px] font-bold uppercase ${statusColor(job)}`}>{stageLabel(job)}</span>
+            </div>
+            <div className="w-24 bg-surface-container-highest h-1 rounded-full">
+              <div
+                className="bg-primary h-full rounded-full transition-all duration-500"
+                style={{ width: job.percentComplete != null ? `${Math.min(job.percentComplete, 100)}%` : '100%' }}
+              />
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <span className={`h-1.5 w-1.5 rounded-full ${statusDot(job)}`} />
+            <span className={`text-[11px] font-bold uppercase ${statusColor(job)}`}>
+              {job.paused ? 'Paused' : stageLabel(job)}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Processing Detail — col-span-3 */}
+      <div className="col-span-3">
+        <div className="flex flex-col">
+          <span className={`text-xs ${done || failed ? 'text-on-surface-variant/50' : 'text-on-surface'}`}>
+            {job.description || stageLabel(job)}
+          </span>
+          <span className="text-[10px] text-on-surface-variant">
+            {active && job.percentComplete != null
+              ? `${job.percentComplete.toFixed(1)}%${job.estimatedMinutesRemaining != null ? ` · ETA ${formatEta(job.estimatedMinutesRemaining)}` : ''}`
+              : `Added ${new Date(job.addedAtUTC || job.createdAtUTC).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`}
+          </span>
         </div>
+      </div>
 
-        {/* Description / progress hint */}
-        {job.description && job.percentComplete == null && (
-          <p className="text-xs text-on-surface-variant mb-3 line-clamp-1">{job.description}</p>
+      {/* Actions — col-span-2 */}
+      <div className="col-span-2 flex justify-end gap-2">
+        {done && (
+          <>
+            {job.youtubeVideoId && (
+              <a href={`https://www.youtube.com/watch?v=${job.youtubeVideoId}`} target="_blank" rel="noreferrer"
+                className="p-1.5 text-on-surface-variant hover:text-on-surface hover:bg-white/5 rounded">
+                <span className="material-symbols-outlined text-lg">play_circle</span>
+              </a>
+            )}
+            <button onClick={onRetry} className="p-1.5 text-primary hover:bg-primary/10 rounded">
+              <span className="material-symbols-outlined text-lg">refresh</span>
+            </button>
+          </>
         )}
-
-        {/* Fail reason */}
-        {job.failed && job.failReason && (
-          <div className="mb-3 p-2 bg-error-container/20 border border-error/20 rounded-lg text-xs text-error line-clamp-2">
-            {job.failReason}
-          </div>
+        {failed && (
+          <>
+            <button onClick={onRetry} className="p-1.5 text-primary hover:bg-primary/10 rounded">
+              <span className="material-symbols-outlined text-lg">refresh</span>
+            </button>
+            <button onClick={onCancel} className="p-1.5 text-on-surface-variant hover:text-error hover:bg-error/5 rounded">
+              <span className="material-symbols-outlined text-lg">delete</span>
+            </button>
+          </>
         )}
-
-        {/* Active progress bar */}
-        {isActive(job) && (
-          <div className="mb-4">
-            <div className="h-1.5 w-full bg-surface-variant rounded-full overflow-hidden">
-              {job.percentComplete != null ? (
-                <div
-                  className="h-full bg-gradient-to-r from-secondary to-on-secondary-container rounded-full transition-all duration-500"
-                  style={{ width: `${Math.min(job.percentComplete, 100)}%` }}
-                />
-              ) : (
-                <div className="h-full bg-gradient-to-r from-secondary to-on-secondary-container rounded-full animate-pulse w-full" />
-              )}
-            </div>
-            <div className="flex items-center justify-between mt-1">
-              {job.percentComplete != null && (
-                <span className="text-[10px] font-mono text-on-surface-variant">
-                  {job.percentComplete.toFixed(1)}%
-                </span>
-              )}
-              {job.estimatedMinutesRemaining != null && (
-                <span className="text-[10px] font-mono text-on-surface-variant ml-auto">
-                  ETA: {formatEta(job.estimatedMinutesRemaining)}
-                </span>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Actions */}
-        <div className="flex items-center gap-2 mt-auto">
-          {/* Twitch link */}
-          {job.vodUrl && (
-            <a
-              href={job.vodUrl}
-              target="_blank"
-              rel="noreferrer"
-              title="View on Twitch"
-              className="p-1.5 text-on-surface-variant hover:text-primary transition-colors"
-            >
-              <span className="material-symbols-outlined text-lg">tv</span>
-            </a>
-          )}
-          {/* YouTube link */}
-          {job.youtubeVideoId && (
-            <a
-              href={`https://www.youtube.com/watch?v=${job.youtubeVideoId}`}
-              target="_blank"
-              rel="noreferrer"
-              title="Watch on YouTube"
-              className="p-1.5 text-on-surface-variant hover:text-error transition-colors"
-            >
-              <span className="material-symbols-outlined text-lg">play_circle</span>
-            </a>
-          )}
-
-          <div className="ml-auto flex items-center gap-1">
-            {/* Completed / cancelled — retry/requeue */}
-            {done && (
-              <button
-                onClick={onRetry}
-                title="Re-queue"
-                className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors"
-              >
-                <span className="material-symbols-outlined text-lg">replay</span>
+        {!done && !failed && (
+          <>
+            {job.paused ? (
+              <button onClick={onResume} className="p-1.5 text-on-surface-variant hover:text-on-surface hover:bg-white/5 rounded">
+                <span className="material-symbols-outlined text-lg">play_arrow</span>
+              </button>
+            ) : (
+              <button onClick={onPause} className="p-1.5 text-on-surface-variant hover:text-on-surface hover:bg-white/5 rounded">
+                <span className="material-symbols-outlined text-lg">pause</span>
               </button>
             )}
-
-            {/* Active / pending controls */}
-            {!done && (
-              <>
-                {job.paused ? (
-                  <button
-                    onClick={onResume}
-                    title="Resume"
-                    className="p-1.5 rounded-lg hover:bg-tertiary/10 text-tertiary transition-colors"
-                  >
-                    <span className="material-symbols-outlined text-lg">play_arrow</span>
-                  </button>
-                ) : !job.failed && (
-                  <button
-                    onClick={onPause}
-                    title="Pause"
-                    className="p-1.5 rounded-lg hover:bg-secondary/10 text-secondary transition-colors"
-                  >
-                    <span className="material-symbols-outlined text-lg">pause</span>
-                  </button>
-                )}
-
-                {job.failed && (
-                  <button
-                    onClick={onRetry}
-                    title="Retry"
-                    className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors"
-                  >
-                    <span className="material-symbols-outlined text-lg">refresh</span>
-                  </button>
-                )}
-
-                <button
-                  onClick={onCancel}
-                  title="Cancel"
-                  className="p-1.5 rounded-lg hover:bg-error/10 text-error transition-colors"
-                >
-                  <span className="material-symbols-outlined text-lg">cancel</span>
-                </button>
-              </>
-            )}
-          </div>
-        </div>
+            <button onClick={onCancel} className="p-1.5 text-on-surface-variant hover:text-error hover:bg-error/5 rounded">
+              <span className="material-symbols-outlined text-lg">delete</span>
+            </button>
+          </>
+        )}
       </div>
     </div>
   );
 }
 
-// ── Filter chip ───────────────────────────────────────────────────────────────
+// ── Filter types ──────────────────────────────────────────────────────────────
 
 type Filter = 'all' | 'active' | 'pending' | 'paused' | 'failed' | 'completed';
-
-function FilterChip({ label, active, count, onClick }: {
-  label: string; active: boolean; count: number; onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
-        active
-          ? 'bg-primary text-on-primary shadow-lg shadow-primary/10'
-          : 'bg-surface-container-lowest text-on-surface-variant hover:bg-surface-bright'
-      }`}
-    >
-      {label} <span className="ml-1 opacity-70">({count})</span>
-    </button>
-  );
-}
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
@@ -326,77 +235,158 @@ export default function VodsPage() {
     completed: jobs.filter(isCompleted).length,
   };
 
+  const filters: { key: Filter; label: string }[] = [
+    { key: 'all',       label: 'All' },
+    { key: 'pending',   label: 'Pending' },
+    { key: 'active',    label: 'Active' },
+    { key: 'paused',    label: 'Paused' },
+    { key: 'failed',    label: 'Failed' },
+    { key: 'completed', label: 'Completed' },
+  ];
+
   return (
     <>
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8">
-        <div>
-          <h1 className="text-4xl font-bold tracking-tighter">Processing Queue</h1>
-          <p className="text-on-surface-variant mt-2 max-w-xl">
-            Real-time telemetry for automated Twitch VOD archival. Auto-refreshes every 3 s.
-          </p>
+      <div className="flex flex-col gap-6 mb-10">
+        <div className="flex justify-between items-end">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight text-on-surface mb-1">Queue Manager</h1>
+            <p className="text-on-surface-variant text-sm">Active transcoding jobs and distribution pipeline.</p>
+          </div>
         </div>
-        <div className="flex items-center gap-2 text-xs text-on-surface-variant">
-          <span className="w-2 h-2 rounded-full bg-tertiary animate-pulse" />
-          Live
-        </div>
-      </div>
 
-      {/* Filter chips */}
-      <div className="flex flex-wrap items-center gap-2 mb-8">
-        <span className="text-[10px] uppercase tracking-widest text-on-surface-variant mr-1">Filters:</span>
-        {(['all', 'active', 'pending', 'paused', 'failed', 'completed'] as Filter[]).map(f => (
-          <FilterChip
-            key={f}
-            label={f.charAt(0).toUpperCase() + f.slice(1)}
-            active={filter === f}
-            count={counts[f]}
-            onClick={() => setFilter(f)}
-          />
-        ))}
+        {/* Filter Pills */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-2">
+          {filters.map(f => (
+            <button
+              key={f.key}
+              onClick={() => setFilter(f.key)}
+              className={`px-4 py-1.5 rounded-full text-xs font-medium transition-all ${
+                filter === f.key
+                  ? 'bg-primary text-on-primary-container font-bold'
+                  : f.key === 'failed' && counts.failed > 0
+                    ? 'bg-surface-container text-error/80 hover:bg-surface-container-high'
+                    : 'bg-surface-container text-on-surface-variant hover:bg-surface-container-high'
+              } ${f.key === 'active' && counts.active > 0 && filter !== f.key ? 'border border-primary/20' : ''}`}
+            >
+              {f.label}{counts[f.key] > 0 && ` (${counts[f.key]})`}
+            </button>
+          ))}
+          <div className="h-4 w-px bg-outline-variant/30 mx-2" />
+          <button className="text-on-surface-variant text-xs flex items-center gap-1 hover:text-on-surface">
+            <span className="material-symbols-outlined text-sm">filter_list</span>
+            More Filters
+          </button>
+        </div>
       </div>
 
       {/* Error */}
       {error && (
-        <div className="mb-6 p-4 bg-error-container/20 border border-error/30 rounded-xl text-error flex items-center gap-3">
+        <div className="mb-6 p-4 bg-error-container/10 border border-white/5 rounded-xl text-error flex items-center gap-3">
           <span className="material-symbols-outlined">error</span>
-          <span>{error}</span>
-          <button onClick={load} className="ml-auto text-xs font-bold underline">Retry</button>
+          <span className="text-sm">{error}</span>
+          <button onClick={load} className="ml-auto text-xs font-bold text-primary hover:underline">Retry</button>
         </div>
       )}
 
       {/* Loading */}
       {loading && (
         <div className="flex items-center justify-center py-20">
-          <div className="w-8 h-8 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+          <div className="w-10 h-10 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
         </div>
       )}
 
-      {/* Grid */}
+      {/* High-Density Table List */}
       {!loading && filtered.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-          {filtered.map(job => (
-            <JobCard
-              key={job.vodId}
-              job={job}
-              thumbnailUrl={thumbnailUrls[job.vodId]}
-              onPause={() => act(() => vodsApi.pause(job.vodId))}
-              onResume={() => act(() => vodsApi.resume(job.vodId))}
-              onCancel={() => act(() => vodsApi.cancel(job.vodId))}
-              onRetry={() => act(() => vodsApi.retry(job.vodId))}
-            />
-          ))}
+        <div className="bg-surface-container-low rounded-xl border border-white/5 overflow-hidden">
+          {/* Table Header */}
+          <div className="grid grid-cols-12 gap-4 px-6 py-4 border-b border-white/5 bg-surface-container/50 text-[10px] uppercase tracking-widest font-bold text-on-surface-variant">
+            <div className="col-span-5">Media Asset &amp; ID</div>
+            <div className="col-span-2">Status &amp; Stage</div>
+            <div className="col-span-3">Processing Detail</div>
+            <div className="col-span-2 text-right">Actions</div>
+          </div>
+
+          {/* Queue Rows */}
+          <div className="divide-y divide-white/5">
+            {filtered.map(job => (
+              <QueueRow
+                key={job.vodId}
+                job={job}
+                thumbnailUrl={thumbnailUrls[job.vodId]}
+                onPause={() => act(() => vodsApi.pause(job.vodId))}
+                onResume={() => act(() => vodsApi.resume(job.vodId))}
+                onCancel={() => act(() => vodsApi.cancel(job.vodId))}
+                onRetry={() => act(() => vodsApi.retry(job.vodId))}
+              />
+            ))}
+          </div>
+
+          {/* Footer */}
+          <div className="px-6 py-4 bg-surface-container-highest/20 flex justify-between items-center text-[10px] text-on-surface-variant border-t border-white/5">
+            <div className="flex gap-4">
+              <span>Total Items: {jobs.length}</span>
+              <span>Active: {counts.active}</span>
+              <span>Failed: {counts.failed}</span>
+            </div>
+            <div className="flex gap-1 items-center">
+              <span className="px-2 font-bold text-on-surface">Showing {filtered.length} of {jobs.length}</span>
+            </div>
+          </div>
         </div>
       )}
 
       {/* Empty state */}
       {!loading && filtered.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-24 gap-4">
-          <span className="material-symbols-outlined text-5xl text-on-surface-variant">video_library</span>
-          <p className="text-on-surface-variant text-lg font-bold">No VODs match this filter</p>
+        <div className="bg-surface-container-low rounded-xl border border-white/5 flex flex-col items-center justify-center py-24 gap-4">
+          <span className="material-symbols-outlined text-5xl text-on-surface-variant/30">video_library</span>
+          <p className="text-on-surface text-lg font-bold">No VODs match this filter</p>
           <p className="text-on-surface-variant text-sm">
             {filter === 'all' ? 'No jobs in the queue yet.' : 'Try selecting a different filter above.'}
           </p>
+        </div>
+      )}
+
+      {/* Bento Insight Cards */}
+      {!loading && jobs.length > 0 && (
+        <div className="grid grid-cols-4 gap-4 mt-8">
+          <div className="col-span-1 bg-surface-container border border-white/5 rounded-xl p-4 flex flex-col justify-between">
+            <span className="text-[10px] font-bold text-on-surface-variant uppercase">Active Jobs</span>
+            <div className="mt-2">
+              <span className="text-xl font-bold text-on-surface">{counts.active}</span>
+            </div>
+          </div>
+          <div className="col-span-1 bg-surface-container border border-white/5 rounded-xl p-4 flex flex-col justify-between">
+            <span className="text-[10px] font-bold text-on-surface-variant uppercase">Pending</span>
+            <div className="mt-2">
+              <span className="text-xl font-bold text-on-surface">{counts.pending}</span>
+              <p className="text-[10px] text-on-surface-variant mt-1">{counts.paused} paused</p>
+            </div>
+          </div>
+          <div className="col-span-1 bg-surface-container border border-white/5 rounded-xl p-4 flex flex-col justify-between">
+            <span className="text-[10px] font-bold text-on-surface-variant uppercase">Completed</span>
+            <div className="mt-2">
+              <span className="text-xl font-bold text-on-surface">{counts.completed}</span>
+            </div>
+          </div>
+          <div className="col-span-1 bg-surface-container border border-white/5 rounded-xl p-4 flex flex-col justify-between relative overflow-hidden">
+            <div className="relative z-10">
+              <span className="text-[10px] font-bold text-on-surface-variant uppercase">Pipeline Health</span>
+              <div className="flex items-center gap-4 mt-2">
+                <span className="text-xl font-bold text-on-surface">
+                  {jobs.length > 0 ? `${(((jobs.length - counts.failed) / jobs.length) * 100).toFixed(1)}%` : '—'}
+                </span>
+                {counts.failed > 0 && (
+                  <span className="text-[10px] bg-error/10 text-error px-2 py-0.5 rounded-full font-bold">
+                    {counts.failed} failed
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="absolute right-0 bottom-0 opacity-10">
+              <span className="material-symbols-outlined text-8xl rotate-12">monitoring</span>
+            </div>
+          </div>
         </div>
       )}
     </>
