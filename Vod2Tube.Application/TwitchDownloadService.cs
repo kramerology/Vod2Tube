@@ -509,8 +509,42 @@ namespace Vod2Tube.Application
             // yt-dlp progress lines look like:
             //   [download]  10.0% of 1.20GiB at 5.00MiB/s ETA 00:03:45 (frag 10/100)
             var progressRegex = new Regex(@"^\[download\]\s+(.+)$", RegexOptions.Compiled);
+            var http416Regex = new Regex(@"HTTP Error 416.*?fragment\s+(\d+)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
             var statusQueue = new System.Collections.Concurrent.ConcurrentQueue<ProgressStatus>();
             var errorOutput = new StringBuilder();
+
+            // Local helper: deletes the stale fragment file when an HTTP 416 error
+            // is detected, allowing yt-dlp's built-in retry to re-download it fresh.
+            void TryDeleteStaleFragment(string text)
+            {
+                var match416 = http416Regex.Match(text);
+                if (!match416.Success || !tempDir.Exists)
+                    return;
+
+                string fragNum = match416.Groups[1].Value;
+                try
+                {
+                    foreach (var fragFile in Directory.EnumerateFiles(finalFile.Directory.FullName))
+                    {
+                        var fileName = Path.GetFileName(fragFile);
+                        // Match e.g. "2686750542.mp4.part-Frag146.part" or "…Frag146"
+                        if (fileName.EndsWith($"Frag{fragNum}.part", StringComparison.OrdinalIgnoreCase) ||
+                            fileName.EndsWith($"Frag{fragNum}", StringComparison.OrdinalIgnoreCase))
+                        {
+                            File.Delete(fragFile);
+                            _logger.LogInformation(
+                                "Deleted stale fragment {File} to recover from HTTP 416",
+                                fileName);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex,
+                        "Failed to delete stale fragment for fragment {Fragment}",
+                        fragNum);
+                }
+            }
 
             process.OutputDataReceived += (sender, e) =>
             {
@@ -519,6 +553,15 @@ namespace Vod2Tube.Application
                 if (match.Success)
                 {
                     string line = match.Groups[1].Value;
+
+                    // Suppress HTTP 416 retry messages from the UI — silently delete
+                    // the stale fragment and let yt-dlp's retry handle the rest.
+                    if (http416Regex.IsMatch(line))
+                    {
+                        TryDeleteStaleFragment(line);
+                        return;
+                    }
+
                     var (pct, eta) = ParseYtDlpProgress(line);
                     if (pct.HasValue)
                         statusQueue.Enqueue(ProgressStatus.WithProgress("Downloading VOD", pct.Value, eta));
@@ -532,6 +575,7 @@ namespace Vod2Tube.Application
                 if (!string.IsNullOrEmpty(e.Data))
                 {
                     errorOutput.AppendLine(e.Data);
+                    TryDeleteStaleFragment(e.Data);
                 }
             };
 
