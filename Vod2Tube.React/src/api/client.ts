@@ -5,7 +5,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     headers: { 'Content-Type': 'application/json', ...init?.headers },
     ...init,
   });
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  if (!res.ok) {
+    let message = `${res.status} ${res.statusText}`;
+    try {
+      const body = await res.json();
+      if (typeof body?.error === 'string') message = body.error;
+    } catch { /* not JSON — keep the status/statusText message */ }
+    throw new Error(message);
+  }
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }
@@ -84,6 +91,61 @@ export const vodsApi = {
 
   getThumbnailUrls: (vodIds: string[]) =>
     request<Record<string, string>>(`/vods/thumbnails?ids=${vodIds.map(encodeURIComponent).join(',')}`),
+};
+
+// ── Settings ──────────────────────────────────────────────────────────────────
+
+export interface AppSettings {
+  twitchDownloaderCliPath: string;
+  ffmpegPath: string;
+  ffprobePath: string;
+  ytDlpPath: string;
+
+  vodDownloadTempDir: string;
+  vodDownloadDir: string;
+  chatRenderTempDir: string;
+  chatRenderDir: string;
+  finalVideoDir: string;
+
+  chatWidth: number;
+  chatFontSize: number;
+  chatUpdateRate: number;
+}
+
+export const settingsApi = {
+  get: () => request<AppSettings>('/settings'),
+  save: (settings: AppSettings) =>
+    request<AppSettings>('/settings', {
+      method: 'PUT',
+      body: JSON.stringify(settings),
+    }),
+};
+
+// ── Filesystem browser ────────────────────────────────────────────────────────
+
+export interface DirectoryEntry {
+  name: string;
+  fullPath: string;
+}
+
+export interface FileEntry {
+  name: string;
+  fullPath: string;
+}
+
+export interface BrowseResult {
+  currentPath: string;
+  parentPath: string | null;
+  directories: DirectoryEntry[];
+  files: FileEntry[];
+  drives: string[] | null; // Windows only
+}
+
+export const filesystemApi = {
+  browse: (path?: string) =>
+    request<BrowseResult>(
+      `/filesystem/browse${path ? `?path=${encodeURIComponent(path)}` : ''}`
+    ),
 };
 
 // ── Stage helpers ─────────────────────────────────────────────────────────────
