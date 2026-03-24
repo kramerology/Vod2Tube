@@ -1,13 +1,15 @@
-using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
 using Google.Apis.Auth.OAuth2;
+using Google.Apis.Auth.OAuth2.Flows;
+using Google.Apis.Auth.OAuth2.Responses;
 using Google.Apis.Services;
 using Google.Apis.Upload;
 using Google.Apis.Util.Store;
 using Google.Apis.YouTube.v3;
 using Google.Apis.YouTube.v3.Data;
 using Microsoft.EntityFrameworkCore;
+using Vod2Tube.Application.Models;
 using Vod2Tube.Infrastructure;
 
 namespace Vod2Tube.Application
@@ -28,21 +30,32 @@ namespace Vod2Tube.Application
         private readonly AppDbContext _dbContext;
         private static readonly string[] Scopes = { YouTubeService.Scope.YoutubeUpload };
         private static readonly string ApplicationName = "Vod2Tube";
-        private static readonly DirectoryInfo CredentialsDir = new("YouTubeCredentials");
+
+        /// <summary>
+        /// Credentials directory stored under <c>%LOCALAPPDATA%\Vod2Tube\YouTubeCredentials</c>
+        /// so that all entry points (Web, Api, Console) share the same token store regardless
+        /// of their working directory.
+        /// </summary>
+        private static readonly DirectoryInfo CredentialsDir = new(
+            Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "Vod2Tube",
+                "YouTubeCredentials"));
 
         static VideoUploader()
         {
             CredentialsDir.Create();
         }
+
         public VideoUploader(AppDbContext dbContext)
         {
             _dbContext = dbContext;
         }
 
-        public virtual async IAsyncEnumerable<string> RunAsync(string vodId, string finalFilePath,
+        public virtual async IAsyncEnumerable<ProgressStatus> RunAsync(string vodId, string finalFilePath,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
         {
-            yield return "Initializing YouTube upload...";
+            yield return ProgressStatus.Indeterminate("Initializing YouTube upload...");
 
             if (!File.Exists(finalFilePath))
             {
@@ -66,10 +79,10 @@ namespace Vod2Tube.Application
                 options.Description = $"Twitch VOD {vodId}";               
             }
 
-            yield return "Authenticating with YouTube...";
+            yield return ProgressStatus.Indeterminate("Authenticating with YouTube...");
             var youtubeService = await GetYouTubeServiceAsync(ct);
 
-            yield return "Preparing video for upload...";
+            yield return ProgressStatus.Indeterminate("Preparing video for upload...");
             var video = new Video
             {
                 Snippet = new VideoSnippet
@@ -113,12 +126,12 @@ namespace Vod2Tube.Application
 
             if (!string.IsNullOrEmpty(savedUploadUri))
             {
-                yield return "Resuming interrupted upload...";
+                yield return ProgressStatus.Indeterminate("Resuming interrupted upload...");
                 uploadUri = new Uri(savedUploadUri);
             }
             else
             {
-                yield return "Initiating upload session...";
+                yield return ProgressStatus.Indeterminate("Initiating upload session...");
                 uploadUri = await videosInsertRequest.InitiateSessionAsync(ct);
 
                 // Persist the upload URI so the upload can be resumed if interrupted
@@ -139,13 +152,14 @@ namespace Vod2Tube.Application
                     }
 
                     if (saveWarning != null)
-                        yield return saveWarning;
+                        yield return ProgressStatus.Indeterminate(saveWarning);
                 }
             }
 
-            yield return $"Uploading video... 0%";
+            yield return ProgressStatus.WithProgress("Uploading video...", 0);
 
             var uploadTask = videosInsertRequest.ResumeAsync(uploadUri, ct);
+            var uploadStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
             while (!uploadTask.IsCompleted)
             {
@@ -156,18 +170,32 @@ namespace Vod2Tube.Application
                     double percentage = (double)lastBytesUploaded / totalBytes * 100;
                     double mbUploaded = lastBytesUploaded / (1024.0 * 1024.0);
                     double mbTotal = totalBytes / (1024.0 * 1024.0);
-                    yield return $"Uploading video... {percentage:F1}% ({mbUploaded:F1} MB / {mbTotal:F1} MB)";
+                    double? etaMinutes = null;
+                    if (lastBytesUploaded > 0)
+                    {
+                        double elapsedSeconds = uploadStopwatch.Elapsed.TotalSeconds;
+                        if (elapsedSeconds > 0)
+                        {
+                            double bytesPerSecond = lastBytesUploaded / elapsedSeconds;
+                            if (bytesPerSecond > 0)
+                                etaMinutes = (totalBytes - lastBytesUploaded) / bytesPerSecond / 60.0;
+                        }
+                    }
+                    yield return ProgressStatus.WithProgress(
+                        $"Uploading video... {percentage:F1}% ({mbUploaded:F1} MB / {mbTotal:F1} MB)",
+                        percentage, etaMinutes);
                 }
             }
 
             if (totalBytes > 0)
             {
                 double mbTotal = totalBytes / (1024.0 * 1024.0);
-                yield return $"Uploading video... 100.0% ({mbTotal:F1} MB / {mbTotal:F1} MB)";
+                yield return ProgressStatus.WithProgress(
+                    $"Uploading video... 100.0% ({mbTotal:F1} MB / {mbTotal:F1} MB)", 100);
             }
             else
             {
-                yield return "Uploading video... 100%";
+                yield return ProgressStatus.WithProgress("Uploading video... 100%", 100);
             }
 
             var uploadStatus = await uploadTask;
@@ -187,14 +215,14 @@ namespace Vod2Tube.Application
                 await _dbContext.SaveChangesAsync(ct);
             }
 
-            yield return "Upload completed successfully!";
+            yield return ProgressStatus.WithProgress("Upload completed successfully!", 100);
 
             // Add to playlist if specified
             if (!string.IsNullOrEmpty(options.PlaylistId) && !string.IsNullOrEmpty(uploadedVideoId))
             {
-                yield return "Adding video to playlist...";
+                yield return ProgressStatus.Indeterminate("Adding video to playlist...");
                 await AddVideoToPlaylistAsync(youtubeService, uploadedVideoId, options.PlaylistId, ct);
-                yield return "Video added to playlist!";
+                yield return ProgressStatus.WithProgress("Video added to playlist!", 100);
             }
         }
 
@@ -205,26 +233,74 @@ namespace Vod2Tube.Application
             if (!File.Exists(clientSecretsPath))
             {
                 throw new FileNotFoundException(
-                    $"YouTube OAuth credentials not found. Please create a file at '{clientSecretsPath}' with your OAuth 2.0 client secrets from Google Cloud Console. " +
-                    $"Visit https://console.cloud.google.com/apis/credentials to create OAuth 2.0 credentials."
-                );
+                    $"YouTube OAuth credentials not found. Please place your OAuth 2.0 client secrets file at:\n" +
+                    $"  {clientSecretsPath}\n\n" +
+                    $"Visit https://console.cloud.google.com/apis/credentials to create OAuth 2.0 credentials.");
             }
 
-            UserCredential credential;
+            GoogleClientSecrets clientSecrets;
             using (var stream = new FileStream(clientSecretsPath, FileMode.Open, FileAccess.Read))
             {
-                credential = await GoogleWebAuthorizationBroker.AuthorizeAsync(
-                    GoogleClientSecrets.FromStream(stream).Secrets,
-                    Scopes,
-                    "user",
-                    ct,
-                    new FileDataStore(Path.Combine(CredentialsDir.FullName, "token_store"), true)
-                );
+                clientSecrets = GoogleClientSecrets.FromStream(stream);
             }
+
+            var tokenStorePath = Path.Combine(CredentialsDir.FullName, "token_store");
+            var tokenStore = new FileDataStore(tokenStorePath, fullPath: true);
+
+            // Check if a token already exists in the store.
+            var existingToken = await tokenStore.GetAsync<TokenResponse>("user");
+
+            if (existingToken != null)
+            {
+                // Build a credential from the stored token without opening a browser.
+                var flow = new GoogleAuthorizationCodeFlow(new GoogleAuthorizationCodeFlow.Initializer
+                {
+                    ClientSecrets = clientSecrets.Secrets,
+                    Scopes = Scopes,
+                    DataStore = tokenStore,
+                });
+
+                var credential = new UserCredential(flow, "user", existingToken);
+
+                // If the access token is expired, explicitly refresh it.
+                // GoogleWebAuthorizationBroker.AuthorizeAsync would silently open a browser
+                // when refresh fails — here we throw a clear error instead.
+                if (credential.Token.IsStale)
+                {
+                    if (!await credential.RefreshTokenAsync(ct))
+                    {
+                        // The refresh token is no longer valid.  Delete the stale entry so the
+                        // next invocation can perform a clean interactive auth.
+                        await tokenStore.DeleteAsync<TokenResponse>("user");
+
+                        throw new InvalidOperationException(
+                            "YouTube OAuth token has expired and could not be refreshed. " +
+                            "This commonly happens when the Google Cloud project's OAuth consent screen " +
+                            "is in \"Testing\" mode (refresh tokens expire after 7 days). Either:\n" +
+                            "  1. Publish your OAuth consent screen in Google Cloud Console, or\n" +
+                            "  2. Restart the application — you will be prompted to re-authenticate once.\n\n" +
+                            $"Token store: {tokenStorePath}");
+                    }
+                }
+
+                return new YouTubeService(new BaseClientService.Initializer
+                {
+                    HttpClientInitializer = credential,
+                    ApplicationName = ApplicationName
+                });
+            }
+
+            // No stored token — perform one-time interactive authorization via browser.
+            var newCredential = await GoogleWebAuthorizationBroker.AuthorizeAsync(
+                clientSecrets.Secrets,
+                Scopes,
+                "user",
+                ct,
+                tokenStore);
 
             return new YouTubeService(new BaseClientService.Initializer
             {
-                HttpClientInitializer = credential,
+                HttpClientInitializer = newCredential,
                 ApplicationName = ApplicationName
             });
         }
