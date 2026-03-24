@@ -38,7 +38,6 @@ builder.Services.AddScoped<FinalRenderer>();
 builder.Services.AddScoped<VideoUploader>();
 builder.Services.AddScoped<VodDownloader>();
 
-
 builder.Services.AddHostedService<VodPopulator>();
 builder.Services.AddHostedService<JobManager>();
 
@@ -54,7 +53,6 @@ app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseAntiforgery();
 
-// Ensure the database schema is created (consistent with Console project)
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();

@@ -154,7 +154,7 @@ namespace Vod2Tube.Application.Services
             job.Paused = false;
             // Reset upload-related state so that a retry starts a fresh upload.
             job.YoutubeVideoId = string.Empty;
-            job.ResumableUploadUri = null;
+            job.ResumableUploadUri = string.Empty;
             await _dbContext.SaveChangesAsync();
             _logger.LogInformation("Retried VOD {VodId} — reset to Pending", vodId);
             return true;
@@ -172,6 +172,8 @@ namespace Vod2Tube.Application.Services
                 FailReason = pipeline.FailReason,
                 FailCount = pipeline.FailCount,
                 YoutubeVideoId = pipeline.YoutubeVideoId,
+                PercentComplete = pipeline.PercentComplete,
+                EstimatedMinutesRemaining = pipeline.EstimatedMinutesRemaining,
                 Title = vod?.Title ?? pipeline.VodId,
                 ChannelName = vod?.ChannelName ?? string.Empty,
                 CreatedAtUTC = vod?.CreatedAtUTC ?? DateTime.MinValue,
