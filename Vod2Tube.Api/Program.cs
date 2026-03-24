@@ -121,4 +121,50 @@ settings.MapPut("/", async (AppSettings incoming, SettingsService svc) =>
     return Results.Ok(await svc.GetSettingsAsync());
 });
 
+// ── Filesystem browser ────────────────────────────────────────────────────────
+
+app.MapGet("/api/filesystem/browse", (string? path) =>
+{
+    try
+    {
+        // Resolve to absolute; if non-existent, walk up to nearest existing ancestor
+        string current = string.IsNullOrWhiteSpace(path)
+            ? Directory.GetCurrentDirectory()
+            : Path.GetFullPath(path);
+
+        while (!Directory.Exists(current))
+        {
+            string? parent = Path.GetDirectoryName(current);
+            if (parent == null || parent == current)
+            {
+                current = Directory.GetCurrentDirectory();
+                break;
+            }
+            current = parent;
+        }
+
+        var dirs = Directory.EnumerateDirectories(current)
+            .Select(d => new { name = Path.GetFileName(d), fullPath = d })
+            .OrderBy(d => d.name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        string? parentPath = Path.GetDirectoryName(current);
+
+        // Windows: expose logical drives so the user can switch drive letters
+        string[]? drives = OperatingSystem.IsWindows()
+            ? DriveInfo.GetDrives().Where(d => d.IsReady).Select(d => d.RootDirectory.FullName).ToArray()
+            : null;
+
+        return Results.Ok(new { currentPath = current, parentPath, directories = dirs, drives });
+    }
+    catch (UnauthorizedAccessException)
+    {
+        return Results.Json(new { error = "Access denied" }, statusCode: 403);
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
 app.Run();
