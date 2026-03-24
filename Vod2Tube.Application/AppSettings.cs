@@ -7,11 +7,17 @@ namespace Vod2Tube.Application
     public class AppSettings
     {
         // ── Tool paths ────────────────────────────────────────────────────────
+        // Defaults point to a "tools" folder next to the application binary.
+        // Append .exe on Windows; no extension on Linux/macOS.
 
-        public string TwitchDownloaderCliPath { get; set; } = "TwitchDownloaderCLI";
-        public string FfmpegPath { get; set; } = "ffmpeg";
-        public string FfprobePath { get; set; } = "ffprobe";
-        public string YtDlpPath { get; set; } = "yt-dlp";
+        private static string ToolPath(string name) =>
+            Path.Combine(AppContext.BaseDirectory, "tools",
+                OperatingSystem.IsWindows() ? name + ".exe" : name);
+
+        public string TwitchDownloaderCliPath { get; set; } = ToolPath("TwitchDownloaderCLI");
+        public string FfmpegPath { get; set; } = ToolPath("ffmpeg");
+        public string FfprobePath { get; set; } = ToolPath("ffprobe");
+        public string YtDlpPath { get; set; } = ToolPath("yt-dlp");
 
         // ── Storage directories ───────────────────────────────────────────────
         // Defaults are placed under a "storage" sub-folder next to the
