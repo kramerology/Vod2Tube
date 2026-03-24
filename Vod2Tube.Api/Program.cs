@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Vod2Tube.Application;
 using Vod2Tube.Application.Services;
 using Vod2Tube.Domain;
@@ -16,6 +17,11 @@ builder.Services.AddDbContextFactory<AppDbContext>(options =>
     options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
 builder.Services.AddTransient<AppDbContext>(sp =>
     sp.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContext());
+
+// Settings
+builder.Services.AddOptions<AppSettings>();
+builder.Services.AddScoped<IConfigureOptions<AppSettings>, AppSettingsConfigurator>();
+builder.Services.AddScoped<SettingsService>();
 
 builder.Services.AddScoped<ChannelService>();
 builder.Services.AddScoped<PipelineService>();
@@ -100,6 +106,19 @@ vods.MapGet("/thumbnails", async (string ids, TwitchGraphQLService twitchSvc) =>
     var vodIds = ids.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
     var urls = await twitchSvc.GetVodThumbnailUrlsAsync(vodIds);
     return Results.Ok(urls);
+});
+
+// ── Settings ──────────────────────────────────────────────────────────────────
+
+var settings = app.MapGroup("/api/settings");
+
+settings.MapGet("/", async (SettingsService svc) =>
+    Results.Ok(await svc.GetSettingsAsync()));
+
+settings.MapPut("/", async (AppSettings incoming, SettingsService svc) =>
+{
+    await svc.SaveSettingsAsync(incoming);
+    return Results.Ok(await svc.GetSettingsAsync());
 });
 
 app.Run();

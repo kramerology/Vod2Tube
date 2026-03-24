@@ -1,6 +1,8 @@
 using Vod2Tube.Application;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
+using Vod2Tube.Application.Services;
 using Vod2Tube.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
@@ -43,6 +45,11 @@ try
             services.AddScoped<VideoUploader>();
             services.AddScoped<TwitchGraphQLService>();
             services.AddScoped<TwitchDownloadService>();
+
+            // Settings
+            services.AddOptions<AppSettings>();
+            services.AddScoped<IConfigureOptions<AppSettings>, AppSettingsConfigurator>();
+            services.AddScoped<SettingsService>();
 
             services.AddDbContext<AppDbContext>(options =>
             {

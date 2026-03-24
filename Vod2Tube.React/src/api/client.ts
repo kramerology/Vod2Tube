@@ -86,6 +86,34 @@ export const vodsApi = {
     request<Record<string, string>>(`/vods/thumbnails?ids=${vodIds.map(encodeURIComponent).join(',')}`),
 };
 
+// ── Settings ──────────────────────────────────────────────────────────────────
+
+export interface AppSettings {
+  twitchDownloaderCliPath: string;
+  ffmpegPath: string;
+  ffprobePath: string;
+  ytDlpPath: string;
+
+  vodDownloadTempDir: string;
+  vodDownloadDir: string;
+  chatRenderTempDir: string;
+  chatRenderDir: string;
+  finalVideoDir: string;
+
+  chatWidth: number;
+  chatFontSize: number;
+  chatUpdateRate: number;
+}
+
+export const settingsApi = {
+  get: () => request<AppSettings>('/settings'),
+  save: (settings: AppSettings) =>
+    request<AppSettings>('/settings', {
+      method: 'PUT',
+      body: JSON.stringify(settings),
+    }),
+};
+
 // ── Stage helpers ─────────────────────────────────────────────────────────────
 
 const ACTIVE_STAGES = new Set([
