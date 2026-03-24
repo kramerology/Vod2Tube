@@ -82,8 +82,10 @@ function DirectoryBrowserModal({
     }
   }, []);
 
-  // Open at the current field value (or server cwd if empty)
-  useEffect(() => { navigate(initialPath || undefined); }, [navigate]);  // eslint-disable-line react-hooks/exhaustive-deps
+  // Runs once on mount to open at the current field value (or server cwd if empty).
+  // The modal is remounted fresh each time it opens, so [] is correct here.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { navigate(initialPath || undefined); }, []);
 
   function handlePathInputKey(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === 'Enter') navigate(pathInput);
@@ -284,6 +286,279 @@ function DirField({
   );
 }
 
+// ── File Browser Modal ─────────────────────────────────────────────────────────
+
+function FileBrowserModal({
+  initialPath,
+  defaultFilter,
+  onSelect,
+  onClose,
+}: {
+  initialPath: string;
+  defaultFilter: string;
+  onSelect: (path: string) => void;
+  onClose: () => void;
+}) {
+  const [browse, setBrowse] = useState<BrowseResult | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [pathInput, setPathInput] = useState(initialPath);
+  const [filter, setFilter] = useState(defaultFilter);
+  const pathInputRef = useRef<HTMLInputElement>(null);
+
+  const navigate = useCallback(async (path?: string) => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const result = await filesystemApi.browse(path);
+      setBrowse(result);
+      setPathInput(result.currentPath);
+    } catch (e) {
+      setLoadError((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Runs once on mount to open at the current field value (or server cwd if empty).
+  // The modal is remounted fresh each time it opens, so [] is correct here.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { navigate(initialPath || undefined); }, []);
+
+  function handlePathInputKey(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter') navigate(pathInput);
+  }
+
+  const sep = browse?.currentPath.includes('\\') ? '\\' : '/';
+
+  /** Breadcrumb segments from the current path */
+  function breadcrumbs() {
+    if (!browse) return [];
+    const parts = browse.currentPath.split(/[\\/]/).filter(Boolean);
+    return parts.map((part, i) => {
+      const fullPath = browse.currentPath.startsWith('/')
+        ? '/' + parts.slice(0, i + 1).join('/')
+        : parts.slice(0, i + 1).join(sep) + (i === 0 ? sep : '');
+      return { label: part, fullPath };
+    });
+  }
+
+  /** Files visible after applying the current filter */
+  const visibleFiles = browse?.files.filter(f =>
+    filter.trim() === '' ||
+    f.name.toLowerCase().includes(filter.trim().toLowerCase())
+  ) ?? [];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="bg-surface-container rounded-xl w-full max-w-2xl shadow-[0px_10px_30px_rgba(6,14,32,0.5)] border border-outline-variant/[0.15] flex flex-col max-h-[80vh]">
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-white/5 shrink-0">
+          <h2 className="text-sm font-bold flex items-center gap-2">
+            <span className="material-symbols-outlined text-primary text-lg">insert_drive_file</span>
+            Select File
+          </h2>
+          <button onClick={onClose} className="text-on-surface-variant hover:text-on-surface transition-colors material-symbols-outlined text-lg">
+            close
+          </button>
+        </div>
+
+        {/* Path bar */}
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-white/5 bg-surface-container-highest/30 shrink-0">
+          <button
+            onClick={() => browse?.parentPath ? navigate(browse.parentPath) : undefined}
+            disabled={!browse?.parentPath || loading}
+            className="shrink-0 flex items-center justify-center w-8 h-8 rounded-lg text-on-surface-variant hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors material-symbols-outlined text-lg"
+            title="Go up"
+          >
+            arrow_upward
+          </button>
+          <input
+            ref={pathInputRef}
+            value={pathInput}
+            onChange={e => setPathInput(e.target.value)}
+            onKeyDown={handlePathInputKey}
+            onBlur={() => { if (pathInput !== browse?.currentPath) navigate(pathInput); }}
+            className="flex-1 min-w-0 bg-transparent border-b border-outline-variant/30 text-on-surface text-sm py-1 px-1 focus:outline-none focus:border-primary/60 font-mono"
+            spellCheck={false}
+          />
+          <button
+            onClick={() => navigate(pathInput)}
+            disabled={loading}
+            className="shrink-0 flex items-center justify-center w-8 h-8 rounded-lg text-on-surface-variant hover:bg-white/10 disabled:opacity-30 transition-colors material-symbols-outlined text-lg"
+            title="Navigate"
+          >
+            arrow_forward
+          </button>
+        </div>
+
+        {/* Windows drives */}
+        {browse?.drives && (
+          <div className="flex items-center gap-1 px-4 py-2 border-b border-white/5 bg-surface-container-highest/10 shrink-0 overflow-x-auto">
+            <span className="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold mr-1 shrink-0">Drives:</span>
+            {browse.drives.map(drive => (
+              <button
+                key={drive}
+                onClick={() => navigate(drive)}
+                className="shrink-0 px-2.5 py-1 rounded text-xs font-mono text-on-surface-variant hover:bg-white/10 hover:text-on-surface transition-colors border border-white/10"
+              >
+                {drive}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Breadcrumb */}
+        {browse && breadcrumbs().length > 0 && (
+          <div className="flex items-center gap-1 px-4 py-2 border-b border-white/5 shrink-0 overflow-x-auto text-xs text-on-surface-variant">
+            {breadcrumbs().map((crumb, i, arr) => (
+              <span key={crumb.fullPath} className="flex items-center gap-1 shrink-0">
+                {i > 0 && <span className="opacity-30">/</span>}
+                <button
+                  onClick={() => navigate(crumb.fullPath)}
+                  className={`hover:text-on-surface transition-colors ${i === arr.length - 1 ? 'text-primary font-semibold' : ''}`}
+                >
+                  {crumb.label}
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Filter bar */}
+        <div className="flex items-center gap-2 px-4 py-2.5 border-b border-white/5 shrink-0 bg-surface-container-highest/10">
+          <span className="material-symbols-outlined text-on-surface-variant/60 text-base shrink-0">filter_list</span>
+          <input
+            type="text"
+            value={filter}
+            onChange={e => setFilter(e.target.value)}
+            placeholder="Filter files… (leave empty to show all)"
+            className="flex-1 min-w-0 bg-transparent text-on-surface text-xs py-0.5 px-1 focus:outline-none font-mono border-b border-outline-variant/20 focus:border-primary/50"
+          />
+          {filter && (
+            <button
+              onClick={() => setFilter('')}
+              className="shrink-0 material-symbols-outlined text-on-surface-variant/60 hover:text-on-surface text-base transition-colors"
+              title="Clear filter"
+            >
+              close
+            </button>
+          )}
+        </div>
+
+        {/* Directory + file list */}
+        <div className="flex-1 overflow-y-auto min-h-0 px-2 py-2">
+          {loading && (
+            <div className="flex items-center justify-center py-10">
+              <span className="material-symbols-outlined text-on-surface-variant text-3xl animate-spin">progress_activity</span>
+            </div>
+          )}
+          {!loading && loadError && (
+            <div className="text-error text-sm p-4 flex items-center gap-2">
+              <span className="material-symbols-outlined text-base">error</span>
+              {loadError}
+            </div>
+          )}
+          {!loading && !loadError && browse && (
+            <>
+              {browse.directories.map(dir => (
+                <button
+                  key={dir.fullPath}
+                  onClick={() => navigate(dir.fullPath)}
+                  className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-sm text-on-surface hover:bg-white/5 transition-colors group"
+                >
+                  <span className="material-symbols-outlined text-primary/70 group-hover:text-primary text-lg shrink-0">folder</span>
+                  <span className="truncate text-on-surface-variant">{dir.name}</span>
+                </button>
+              ))}
+              {visibleFiles.map(file => (
+                <button
+                  key={file.fullPath}
+                  onClick={() => onSelect(file.fullPath)}
+                  className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-sm text-on-surface hover:bg-primary/10 hover:text-primary transition-colors group"
+                >
+                  <span className="material-symbols-outlined text-on-surface-variant/60 group-hover:text-primary text-lg shrink-0">insert_drive_file</span>
+                  <span className="truncate font-medium">{file.name}</span>
+                </button>
+              ))}
+              {browse.directories.length === 0 && visibleFiles.length === 0 && (
+                <p className="text-center text-on-surface-variant/60 text-sm py-10">
+                  {filter ? 'No matching files' : 'Empty directory'}
+                </p>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="shrink-0 px-5 py-4 border-t border-white/5 flex items-center justify-between gap-3">
+          <p className="text-xs text-on-surface-variant truncate font-mono min-w-0">
+            {browse?.currentPath ?? '…'}
+          </p>
+          <button
+            onClick={onClose}
+            className="shrink-0 px-4 py-2 rounded-lg text-sm font-semibold text-on-surface-variant hover:bg-surface-bright transition-colors"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── File field (text + file browse button) ────────────────────────────────────
+
+function FileField({
+  label,
+  value,
+  defaultFilter,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  defaultFilter: string;
+  onChange: (v: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      <div>
+        <label className="block mb-1 text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">
+          {label}
+        </label>
+        <div className="flex items-stretch gap-2">
+          <input
+            type="text"
+            className="flex-1 min-w-0 bg-surface-container-highest border border-outline-variant/20 rounded-lg py-2.5 px-4 text-on-surface text-sm focus:outline-none focus:ring-1 focus:ring-primary/50 transition-all font-mono placeholder:text-on-surface-variant/50"
+            value={value}
+            onChange={e => onChange(e.target.value)}
+          />
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            className="shrink-0 flex items-center justify-center w-10 rounded-lg bg-surface-container-highest border border-outline-variant/20 text-on-surface-variant hover:text-primary hover:border-primary/40 hover:bg-primary/5 transition-all material-symbols-outlined text-lg"
+            title="Browse…"
+          >
+            insert_drive_file
+          </button>
+        </div>
+      </div>
+
+      {open && (
+        <FileBrowserModal
+          initialPath={value}
+          defaultFilter={defaultFilter}
+          onSelect={path => { onChange(path); setOpen(false); }}
+          onClose={() => setOpen(false)}
+        />
+      )}
+    </>
+  );
+}
+
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
@@ -377,24 +652,28 @@ export default function SettingsPage() {
 
       {/* Tool Paths */}
       <SettingsSection icon="terminal" title="Tool Paths">
-        <Field
+        <FileField
           label="TwitchDownloaderCLI Path"
           value={draft.twitchDownloaderCliPath}
+          defaultFilter="TwitchDownloaderCLI"
           onChange={v => set('twitchDownloaderCliPath', v)}
         />
-        <Field
+        <FileField
           label="FFmpeg Path"
           value={draft.ffmpegPath}
+          defaultFilter="ffmpeg"
           onChange={v => set('ffmpegPath', v)}
         />
-        <Field
+        <FileField
           label="FFprobe Path"
           value={draft.ffprobePath}
+          defaultFilter="ffprobe"
           onChange={v => set('ffprobePath', v)}
         />
-        <Field
+        <FileField
           label="yt-dlp Path"
           value={draft.ytDlpPath}
+          defaultFilter="yt-dlp"
           onChange={v => set('ytDlpPath', v)}
         />
       </SettingsSection>

@@ -148,6 +148,11 @@ app.MapGet("/api/filesystem/browse", (string? path) =>
             .OrderBy(d => d.name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
+        var files = Directory.EnumerateFiles(current)
+            .Select(f => new { name = Path.GetFileName(f), fullPath = f })
+            .OrderBy(f => f.name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
         string? parentPath = Path.GetDirectoryName(current);
 
         // Windows: expose logical drives so the user can switch drive letters
@@ -155,7 +160,7 @@ app.MapGet("/api/filesystem/browse", (string? path) =>
             ? DriveInfo.GetDrives().Where(d => d.IsReady).Select(d => d.RootDirectory.FullName).ToArray()
             : null;
 
-        return Results.Ok(new { currentPath = current, parentPath, directories = dirs, drives });
+        return Results.Ok(new { currentPath = current, parentPath, directories = dirs, files, drives });
     }
     catch (UnauthorizedAccessException)
     {

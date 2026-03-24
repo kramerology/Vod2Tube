@@ -121,10 +121,16 @@ export interface DirectoryEntry {
   fullPath: string;
 }
 
+export interface FileEntry {
+  name: string;
+  fullPath: string;
+}
+
 export interface BrowseResult {
   currentPath: string;
   parentPath: string | null;
   directories: DirectoryEntry[];
+  files: FileEntry[];
   drives: string[] | null; // Windows only
 }
 
