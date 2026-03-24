@@ -166,8 +166,8 @@ namespace Vod2Tube.Application
             int chatWidth  = Settings.ChatWidth;
             int fontSize   = Settings.ChatFontSize;
             int updateRate = Settings.ChatUpdateRate;
-            string fpsStr  = RunProcessWithOutput(Settings.FfprobePath, $"-v error -select_streams v:0 -show_entries stream=r_frame_rate -of default=noprint_wrappers=1:nokey=1 {vodFile.FullName}").Trim();
-            string height  = RunProcessWithOutput(Settings.FfprobePath, $"-v error -select_streams v:0 -show_entries stream=height -of default=noprint_wrappers=1:nokey=1 {vodFile.FullName}").Trim();
+            string fpsStr  = RunProcessWithOutput(Settings.FfprobePath, $"-v error -select_streams v:0 -show_entries stream=r_frame_rate -of default=noprint_wrappers=1:nokey=1 \"{vodFile.FullName}\"").Trim();
+            string height  = RunProcessWithOutput(Settings.FfprobePath, $"-v error -select_streams v:0 -show_entries stream=height -of default=noprint_wrappers=1:nokey=1 \"{vodFile.FullName}\"").Trim();
             double fps     = ParseFps(fpsStr);
 
             double totalDuration = GetVideoDuration(vodFile.FullName);
