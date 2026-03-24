@@ -48,7 +48,7 @@ try
 
             // Settings
             services.AddOptions<AppSettings>();
-            services.AddScoped<IConfigureOptions<AppSettings>, AppSettingsConfigurator>();
+            services.AddSingleton<IConfigureOptions<AppSettings>, AppSettingsConfigurator>();
             services.AddScoped<SettingsService>();
 
             services.AddDbContext<AppDbContext>(options =>

@@ -664,6 +664,7 @@ namespace Vod2Tube.Application
                 var psi = new ProcessStartInfo
                 {
                     FileName = Settings.FfmpegPath,
+                    Arguments = "-hide_banner -encoders",
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                     UseShellExecute = false,

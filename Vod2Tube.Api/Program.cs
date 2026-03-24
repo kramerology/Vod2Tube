@@ -20,7 +20,7 @@ builder.Services.AddTransient<AppDbContext>(sp =>
 
 // Settings
 builder.Services.AddOptions<AppSettings>();
-builder.Services.AddScoped<IConfigureOptions<AppSettings>, AppSettingsConfigurator>();
+builder.Services.AddSingleton<IConfigureOptions<AppSettings>, AppSettingsConfigurator>();
 builder.Services.AddScoped<SettingsService>();
 
 builder.Services.AddScoped<ChannelService>();
