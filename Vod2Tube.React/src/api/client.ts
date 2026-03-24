@@ -101,9 +101,8 @@ export interface AppSettings {
   ffprobePath: string;
   ytDlpPath: string;
 
-  vodDownloadTempDir: string;
+  tempDir: string;
   vodDownloadDir: string;
-  chatRenderTempDir: string;
   chatRenderDir: string;
   finalVideoDir: string;
 
