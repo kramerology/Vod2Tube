@@ -13,8 +13,8 @@ namespace Vod2Tube.Application
             _downloadService = downloadService;
             _options = options;
             var s = options.Value;
-            Directory.CreateDirectory(s.ChatRenderTempDir);
-            Directory.CreateDirectory(s.ChatRenderDir);
+            WorkerPaths.EnsureDirectory(s.ChatRenderTempDir, nameof(AppSettings.ChatRenderTempDir));
+            WorkerPaths.EnsureDirectory(s.ChatRenderDir,     nameof(AppSettings.ChatRenderDir));
         }
 
         public string GetOutputPath(string vodId)
