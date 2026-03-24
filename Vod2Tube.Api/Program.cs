@@ -123,8 +123,13 @@ settings.MapPut("/", async (AppSettings incoming, SettingsService svc) =>
 
 // ── Filesystem browser ────────────────────────────────────────────────────────
 
-app.MapGet("/api/filesystem/browse", (string? path) =>
+app.MapGet("/api/filesystem/browse", (string? path, HttpContext ctx) =>
 {
+    // Restrict to loopback — this endpoint lists server directory contents and
+    // Vod2Tube is designed to run as a local-only service.
+    if (ctx.Connection.RemoteIpAddress is not { } remoteIp || !System.Net.IPAddress.IsLoopback(remoteIp))
+        return Results.Json(new { error = "This endpoint is only accessible from localhost" }, statusCode: 403);
+
     try
     {
         // Resolve to absolute; if non-existent, walk up to nearest existing ancestor

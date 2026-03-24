@@ -13,8 +13,8 @@ namespace Vod2Tube.Application
             _downloadService = downloadService;
             _options = options;
             var s = options.Value;
-            Directory.CreateDirectory(s.VodDownloadTempDir);
-            Directory.CreateDirectory(s.VodDownloadDir);
+            WorkerPaths.EnsureDirectory(s.VodDownloadTempDir, nameof(AppSettings.VodDownloadTempDir));
+            WorkerPaths.EnsureDirectory(s.VodDownloadDir,     nameof(AppSettings.VodDownloadDir));
         }
 
         public string GetOutputPath(string vodId)

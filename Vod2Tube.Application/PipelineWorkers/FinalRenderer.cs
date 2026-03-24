@@ -12,7 +12,7 @@ namespace Vod2Tube.Application
         {
             _downloadService = downloadService;
             _options = options;
-            Directory.CreateDirectory(options.Value.FinalVideoDir);
+            WorkerPaths.EnsureDirectory(options.Value.FinalVideoDir, nameof(AppSettings.FinalVideoDir));
         }
 
         public string GetOutputPath(string vodId)
