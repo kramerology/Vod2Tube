@@ -13,8 +13,8 @@ namespace Vod2Tube.Application
             _downloadService = downloadService;
             _options = options;
             var s = options.Value;
-            WorkerPaths.EnsureDirectory(s.VodDownloadTempDir, nameof(AppSettings.VodDownloadTempDir));
-            WorkerPaths.EnsureDirectory(s.VodDownloadDir,     nameof(AppSettings.VodDownloadDir));
+            WorkerPaths.EnsureDirectory(s.TempDir,         nameof(AppSettings.TempDir));
+            WorkerPaths.EnsureDirectory(s.VodDownloadDir,  nameof(AppSettings.VodDownloadDir));
         }
 
         public string GetOutputPath(string vodId)
@@ -28,7 +28,7 @@ namespace Vod2Tube.Application
             var s = _options.Value;
             return _downloadService.DownloadChatNewAsync(
                 vodId,
-                new DirectoryInfo(s.VodDownloadTempDir),
+                new DirectoryInfo(s.TempDir),
                 new FileInfo(GetOutputPath(vodId)),
                 ct);
         }
