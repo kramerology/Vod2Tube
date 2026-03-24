@@ -118,13 +118,40 @@ function DirectoryBrowserModal({
     });
   }
 
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+
+  const handleKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
+      if (event.key === 'Escape') {
+        event.stopPropagation();
+        onClose();
+      }
+    },
+    [onClose],
+  );
+
+  useEffect(() => {
+    dialogRef.current?.focus();
+  }, []);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="bg-surface-container rounded-xl w-full max-w-2xl shadow-[0px_10px_30px_rgba(6,14,32,0.5)] border border-outline-variant/[0.15] flex flex-col max-h-[80vh]">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="directory-dialog-title"
+        tabIndex={-1}
+        onKeyDown={handleKeyDown}
+        className="bg-surface-container rounded-xl w-full max-w-2xl shadow-[0px_10px_30px_rgba(6,14,32,0.5)] border border-outline-variant/[0.15] flex flex-col max-h-[80vh]"
+      >
 
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-white/5 shrink-0">
-          <h2 className="text-sm font-bold flex items-center gap-2">
+          <h2
+            id="directory-dialog-title"
+            className="text-sm font-bold flex items-center gap-2"
+          >
             <span className="material-symbols-outlined text-primary text-lg">folder_open</span>
             Select Directory
           </h2>
