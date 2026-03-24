@@ -67,17 +67,29 @@ function DirectoryBrowserModal({
   const [loading, setLoading] = useState(false);
   const [pathInput, setPathInput] = useState(initialPath);
   const pathInputRef = useRef<HTMLInputElement>(null);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   const navigate = useCallback(async (path?: string) => {
+    // If the component has unmounted, avoid starting work.
+    if (!isMountedRef.current) return;
     setLoading(true);
     setLoadError(null);
     try {
       const result = await filesystemApi.browse(path);
+      if (!isMountedRef.current) return;
       setBrowse(result);
       setPathInput(result.currentPath);
     } catch (e) {
+      if (!isMountedRef.current) return;
       setLoadError((e as Error).message);
     } finally {
+      if (!isMountedRef.current) return;
       setLoading(false);
     }
   }, []);
