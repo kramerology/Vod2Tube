@@ -114,6 +114,27 @@ export const settingsApi = {
     }),
 };
 
+// ── Filesystem browser ────────────────────────────────────────────────────────
+
+export interface DirectoryEntry {
+  name: string;
+  fullPath: string;
+}
+
+export interface BrowseResult {
+  currentPath: string;
+  parentPath: string | null;
+  directories: DirectoryEntry[];
+  drives: string[] | null; // Windows only
+}
+
+export const filesystemApi = {
+  browse: (path?: string) =>
+    request<BrowseResult>(
+      `/filesystem/browse${path ? `?path=${encodeURIComponent(path)}` : ''}`
+    ),
+};
+
 // ── Stage helpers ─────────────────────────────────────────────────────────────
 
 const ACTIVE_STAGES = new Set([
