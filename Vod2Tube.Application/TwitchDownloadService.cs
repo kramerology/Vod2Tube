@@ -9,23 +9,23 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Vod2Tube.Application.Models;
 
 namespace Vod2Tube.Application
 {
     public class TwitchDownloadService
     {
-        private const string DefaultCliFileName = "E:\\Projects\\Vod2Tube\\Vod2Tube.Console\\bin\\Debug\\net10.0\\TwitchDownloaderCLI.exe";
-        private const string _ffmpegPath        = "E:\\Programs\\ffmpeg\\ffmpeg.exe";
-        private const string _ffprobePath       = "E:\\Programs\\ffmpeg\\ffprobe.exe";
-        private const string _ytDlpPath         = "E:\\Projects\\Vod2Tube\\Vod2Tube.Console\\bin\\Debug\\net10.0\\yt-dlp";
-
         private readonly ILogger<TwitchDownloadService> _logger;
+        private readonly IOptions<AppSettings> _options;
         private readonly Lazy<string> _cachedEncoder;
 
-        public TwitchDownloadService(ILogger<TwitchDownloadService> logger)
+        private AppSettings Settings => _options.Value;
+
+        public TwitchDownloadService(ILogger<TwitchDownloadService> logger, IOptions<AppSettings> options)
         {
             _logger = logger;
+            _options = options;
             _cachedEncoder = new Lazy<string>(DetectVideoEncoder);
         }
 
@@ -163,11 +163,11 @@ namespace Vod2Tube.Application
             if (!File.Exists(vodFile.FullName))
                 throw new FileNotFoundException($"VOD file not found: {vodFile.FullName}");
 
-            int chatWidth  = 350;      // width of chat panel in pixels
-            int fontSize   = 15;       // base font size for chat text
-            int updateRate = 0;        // render each frame exactly (no interpolation)
-            string fpsStr  = RunProcessWithOutput(_ffprobePath, $"-v error -select_streams v:0 -show_entries stream=r_frame_rate -of default=noprint_wrappers=1:nokey=1 {vodFile.FullName}").Trim();
-            string height  = RunProcessWithOutput(_ffprobePath, $"-v error -select_streams v:0 -show_entries stream=height -of default=noprint_wrappers=1:nokey=1 {vodFile.FullName}").Trim();
+            int chatWidth  = Settings.ChatWidth;
+            int fontSize   = Settings.ChatFontSize;
+            int updateRate = Settings.ChatUpdateRate;
+            string fpsStr  = RunProcessWithOutput(Settings.FfprobePath, $"-v error -select_streams v:0 -show_entries stream=r_frame_rate -of default=noprint_wrappers=1:nokey=1 {vodFile.FullName}").Trim();
+            string height  = RunProcessWithOutput(Settings.FfprobePath, $"-v error -select_streams v:0 -show_entries stream=height -of default=noprint_wrappers=1:nokey=1 {vodFile.FullName}").Trim();
             double fps     = ParseFps(fpsStr);
 
             double totalDuration = GetVideoDuration(vodFile.FullName);
@@ -270,7 +270,7 @@ namespace Vod2Tube.Application
                         $"-o \"{segmentTmpFile}\" --collision overwrite " +
                         $"--framerate {fps.ToString(CultureInfo.InvariantCulture)} --chat-height {height} " +
                         $"--chat-width {chatWidth} --font-size {fontSize} --update-rate {updateRate} " +
-                        $"--ffmpeg-path \"{_ffmpegPath}\" -b {beginningArg} -e {endingArg}";
+                        $"--ffmpeg-path \"{Settings.FfmpegPath}\" -b {beginningArg} -e {endingArg}";
 
                     yield return ProgressStatus.WithProgress(
                         $"Rendering chat segment {displayNum}/{estimatedSegmentCount}",
@@ -373,7 +373,7 @@ namespace Vod2Tube.Application
         {
             var psi = new ProcessStartInfo
             {
-                FileName = DefaultCliFileName,
+                FileName = Settings.TwitchDownloaderCliPath,
                 Arguments = arguments,
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
@@ -494,7 +494,7 @@ namespace Vod2Tube.Application
 
             var psi = new ProcessStartInfo
             {
-                FileName = _ytDlpPath,
+                FileName = Settings.YtDlpPath,
                 Arguments = arguments,
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
@@ -663,8 +663,7 @@ namespace Vod2Tube.Application
             {
                 var psi = new ProcessStartInfo
                 {
-                    FileName = _ffmpegPath,
-                    Arguments = "-hide_banner -encoders",
+                    FileName = Settings.FfmpegPath,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                     UseShellExecute = false,
@@ -704,7 +703,7 @@ namespace Vod2Tube.Application
         {
             var psi = new ProcessStartInfo
             {
-                FileName = _ffmpegPath,
+                FileName = Settings.FfmpegPath,
                 Arguments = arguments,
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
@@ -787,7 +786,7 @@ namespace Vod2Tube.Application
 
             var psi = new ProcessStartInfo
             {
-                FileName = _ffprobePath,
+                FileName = Settings.FfprobePath,
                 Arguments = arguments,
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
@@ -967,7 +966,7 @@ namespace Vod2Tube.Application
 
             var psi = new ProcessStartInfo
             {
-                FileName = DefaultCliFileName,
+                FileName = Settings.TwitchDownloaderCliPath,
                 Arguments = arguments,
                 UseShellExecute = false,
                 RedirectStandardOutput = true,

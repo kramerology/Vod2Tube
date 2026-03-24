@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using MudBlazor.Services;
 using Vod2Tube.Application;
 using Vod2Tube.Application.Services;
@@ -27,6 +28,11 @@ builder.Services.AddDbContextFactory<AppDbContext>(options =>
     options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
 builder.Services.AddTransient<AppDbContext>(sp =>
     sp.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContext());
+
+// Settings
+builder.Services.AddOptions<AppSettings>();
+builder.Services.AddScoped<IConfigureOptions<AppSettings>, AppSettingsConfigurator>();
+builder.Services.AddScoped<SettingsService>();
 
 builder.Services.AddScoped<ChannelService>();
 builder.Services.AddScoped<PipelineService>();

@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Options;
 using Vod2Tube.Application.Models;
 
 namespace Vod2Tube.Application
@@ -5,23 +6,32 @@ namespace Vod2Tube.Application
     public class ChatRenderer
     {
         private readonly TwitchDownloadService _downloadService;
-        private static readonly DirectoryInfo TempDir = new("ChatRenderTemp");
-        private static readonly DirectoryInfo FinalDir = new("ChatRenders");
+        private readonly IOptionsSnapshot<AppSettings> _options;
 
-        static ChatRenderer()
-        {
-            TempDir.Create();
-            FinalDir.Create();
-        }
-        public ChatRenderer(TwitchDownloadService downloadService)
+        public ChatRenderer(TwitchDownloadService downloadService, IOptionsSnapshot<AppSettings> options)
         {
             _downloadService = downloadService;
+            _options = options;
+            var s = options.Value;
+            Directory.CreateDirectory(s.ChatRenderTempDir);
+            Directory.CreateDirectory(s.ChatRenderDir);
         }
 
-        public string GetOutputPath(string vodId) =>
-            Path.Combine(FinalDir.FullName, $"{vodId}_chat.mp4");
+        public string GetOutputPath(string vodId)
+        {
+            var dir = new DirectoryInfo(_options.Value.ChatRenderDir);
+            return Path.Combine(dir.FullName, $"{vodId}_chat.mp4");
+        }
 
-        public IAsyncEnumerable<ProgressStatus> RunAsync(string vodId, string chatFilePath, string vodFilePath, CancellationToken ct) =>
-            _downloadService.RenderChatVideoAsync(new FileInfo(chatFilePath), new FileInfo(vodFilePath), TempDir, new FileInfo(GetOutputPath(vodId)), ct);
+        public IAsyncEnumerable<ProgressStatus> RunAsync(string vodId, string chatFilePath, string vodFilePath, CancellationToken ct)
+        {
+            var s = _options.Value;
+            return _downloadService.RenderChatVideoAsync(
+                new FileInfo(chatFilePath),
+                new FileInfo(vodFilePath),
+                new DirectoryInfo(s.ChatRenderTempDir),
+                new FileInfo(GetOutputPath(vodId)),
+                ct);
+        }
     }
 }

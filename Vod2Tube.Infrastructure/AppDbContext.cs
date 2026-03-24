@@ -13,6 +13,7 @@ namespace Vod2Tube.Infrastructure
         public DbSet<Channel> Channels { get; set; }
         public DbSet<TwitchVod> TwitchVods { get; set; }
         public DbSet<Pipeline> Pipelines { get; set; }
+        public DbSet<Setting> Settings { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -33,7 +34,11 @@ namespace Vod2Tube.Infrastructure
                 entity.HasKey(p => p.VodId);
             });
 
-
+            modelBuilder.Entity<Setting>(entity =>
+            {
+                entity.HasKey(s => s.Id);
+                entity.HasIndex(s => s.Key).IsUnique();
+            });
         }
     }
 }

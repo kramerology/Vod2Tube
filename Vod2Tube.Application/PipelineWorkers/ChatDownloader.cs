@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Options;
 using Vod2Tube.Application.Models;
 
 namespace Vod2Tube.Application
@@ -5,24 +6,31 @@ namespace Vod2Tube.Application
     public class ChatDownloader
     {
         private readonly TwitchDownloadService _downloadService;
-        private static readonly DirectoryInfo TempDir = new("VodDownloadsTemp");
-        private static readonly DirectoryInfo FinalDir = new("VodDownloads");
+        private readonly IOptionsSnapshot<AppSettings> _options;
 
-        static ChatDownloader()
-        {
-            TempDir.Create();
-            FinalDir.Create();
-        }
-
-        public ChatDownloader(TwitchDownloadService downloadService)
+        public ChatDownloader(TwitchDownloadService downloadService, IOptionsSnapshot<AppSettings> options)
         {
             _downloadService = downloadService;
+            _options = options;
+            var s = options.Value;
+            Directory.CreateDirectory(s.VodDownloadTempDir);
+            Directory.CreateDirectory(s.VodDownloadDir);
         }
 
-        public string GetOutputPath(string vodId) =>
-            Path.Combine(FinalDir.FullName, $"{vodId}.json");
+        public string GetOutputPath(string vodId)
+        {
+            var dir = new DirectoryInfo(_options.Value.VodDownloadDir);
+            return Path.Combine(dir.FullName, $"{vodId}.json");
+        }
 
-        public IAsyncEnumerable<ProgressStatus> RunAsync(string vodId, CancellationToken ct) =>
-            _downloadService.DownloadChatNewAsync(vodId, TempDir, new FileInfo(GetOutputPath(vodId)), ct);
+        public IAsyncEnumerable<ProgressStatus> RunAsync(string vodId, CancellationToken ct)
+        {
+            var s = _options.Value;
+            return _downloadService.DownloadChatNewAsync(
+                vodId,
+                new DirectoryInfo(s.VodDownloadTempDir),
+                new FileInfo(GetOutputPath(vodId)),
+                ct);
+        }
     }
 }
