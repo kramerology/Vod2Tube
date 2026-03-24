@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Vod2Tube.Application;
 using Vod2Tube.Application.Services;
 using Vod2Tube.Domain;
@@ -16,6 +17,11 @@ builder.Services.AddDbContextFactory<AppDbContext>(options =>
     options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
 builder.Services.AddTransient<AppDbContext>(sp =>
     sp.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContext());
+
+// Settings
+builder.Services.AddOptions<AppSettings>();
+builder.Services.AddSingleton<IConfigureOptions<AppSettings>, AppSettingsConfigurator>();
+builder.Services.AddScoped<SettingsService>();
 
 builder.Services.AddScoped<ChannelService>();
 builder.Services.AddScoped<PipelineService>();
@@ -100,6 +106,75 @@ vods.MapGet("/thumbnails", async (string ids, TwitchGraphQLService twitchSvc) =>
     var vodIds = ids.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
     var urls = await twitchSvc.GetVodThumbnailUrlsAsync(vodIds);
     return Results.Ok(urls);
+});
+
+// ── Settings ──────────────────────────────────────────────────────────────────
+
+var settings = app.MapGroup("/api/settings");
+
+settings.MapGet("/", async (SettingsService svc) =>
+    Results.Ok(await svc.GetSettingsAsync()));
+
+settings.MapPut("/", async (AppSettings incoming, SettingsService svc) =>
+{
+    await svc.SaveSettingsAsync(incoming);
+    return Results.Ok(await svc.GetSettingsAsync());
+});
+
+// ── Filesystem browser ────────────────────────────────────────────────────────
+
+app.MapGet("/api/filesystem/browse", (string? path, HttpContext ctx) =>
+{
+    // Restrict to loopback — this endpoint lists server directory contents and
+    // Vod2Tube is designed to run as a local-only service.
+    if (ctx.Connection.RemoteIpAddress is not { } remoteIp || !System.Net.IPAddress.IsLoopback(remoteIp))
+        return Results.Json(new { error = "This endpoint is only accessible from localhost" }, statusCode: 403);
+
+    try
+    {
+        // Resolve to absolute; if non-existent, walk up to nearest existing ancestor
+        string current = string.IsNullOrWhiteSpace(path)
+            ? Directory.GetCurrentDirectory()
+            : Path.GetFullPath(path);
+
+        while (!Directory.Exists(current))
+        {
+            string? parent = Path.GetDirectoryName(current);
+            if (parent == null || parent == current)
+            {
+                current = Directory.GetCurrentDirectory();
+                break;
+            }
+            current = parent;
+        }
+
+        var dirs = Directory.EnumerateDirectories(current)
+            .Select(d => new { name = Path.GetFileName(d), fullPath = d })
+            .OrderBy(d => d.name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var files = Directory.EnumerateFiles(current)
+            .Select(f => new { name = Path.GetFileName(f), fullPath = f })
+            .OrderBy(f => f.name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        string? parentPath = Path.GetDirectoryName(current);
+
+        // Windows: expose logical drives so the user can switch drive letters
+        string[]? drives = OperatingSystem.IsWindows()
+            ? DriveInfo.GetDrives().Where(d => d.IsReady).Select(d => d.RootDirectory.FullName).ToArray()
+            : null;
+
+        return Results.Ok(new { currentPath = current, parentPath, directories = dirs, files, drives });
+    }
+    catch (UnauthorizedAccessException)
+    {
+        return Results.Json(new { error = "Access denied" }, statusCode: 403);
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
 });
 
 app.Run();

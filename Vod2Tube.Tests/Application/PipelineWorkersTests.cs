@@ -1,6 +1,7 @@
 using TUnit.Core;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
+using Microsoft.Extensions.Options;
 using Vod2Tube.Application;
 
 namespace Vod2Tube.Tests.Application;
@@ -12,6 +13,8 @@ namespace Vod2Tube.Tests.Application;
 /// </summary>
 public class PipelineWorkersTests
 {
+    private static IOptionsSnapshot<AppSettings> DefaultOptions() => DefaultAppSettingsSnapshot.Instance;
+
     // =========================================================================
     // VodDownloader.GetOutputPath
     // =========================================================================
@@ -23,7 +26,7 @@ public class PipelineWorkersTests
     [Test]
     public async Task VodDownloader_GetOutputPath_ReturnsExpectedFilename()
     {
-        var downloader = new VodDownloader(null!);
+        var downloader = new VodDownloader(null!, DefaultOptions());
 
         var path = downloader.GetOutputPath("12345");
 
@@ -36,7 +39,7 @@ public class PipelineWorkersTests
     [Test]
     public async Task VodDownloader_GetOutputPath_DifferentIds_ProduceDifferentPaths()
     {
-        var downloader = new VodDownloader(null!);
+        var downloader = new VodDownloader(null!, DefaultOptions());
 
         var path1 = downloader.GetOutputPath("aaa");
         var path2 = downloader.GetOutputPath("bbb");
@@ -55,7 +58,7 @@ public class PipelineWorkersTests
     [Test]
     public async Task ChatDownloader_GetOutputPath_ReturnsExpectedFilename()
     {
-        var downloader = new ChatDownloader(null!);
+        var downloader = new ChatDownloader(null!, DefaultOptions());
 
         var path = downloader.GetOutputPath("12345");
 
@@ -68,7 +71,7 @@ public class PipelineWorkersTests
     [Test]
     public async Task ChatDownloader_GetOutputPath_DifferentIds_ProduceDifferentPaths()
     {
-        var downloader = new ChatDownloader(null!);
+        var downloader = new ChatDownloader(null!, DefaultOptions());
 
         var path1 = downloader.GetOutputPath("aaa");
         var path2 = downloader.GetOutputPath("bbb");
@@ -87,7 +90,7 @@ public class PipelineWorkersTests
     [Test]
     public async Task ChatRenderer_GetOutputPath_ReturnsExpectedFilename()
     {
-        var renderer = new ChatRenderer(null!);
+        var renderer = new ChatRenderer(null!, DefaultOptions());
 
         var path = renderer.GetOutputPath("12345");
 
@@ -100,7 +103,7 @@ public class PipelineWorkersTests
     [Test]
     public async Task ChatRenderer_GetOutputPath_DifferentIds_ProduceDifferentPaths()
     {
-        var renderer = new ChatRenderer(null!);
+        var renderer = new ChatRenderer(null!, DefaultOptions());
 
         var path1 = renderer.GetOutputPath("aaa");
         var path2 = renderer.GetOutputPath("bbb");
@@ -119,7 +122,7 @@ public class PipelineWorkersTests
     [Test]
     public async Task FinalRenderer_GetOutputPath_ReturnsExpectedFilename()
     {
-        var renderer = new FinalRenderer(null!);
+        var renderer = new FinalRenderer(null!, DefaultOptions());
 
         var path = renderer.GetOutputPath("12345");
 
@@ -132,7 +135,7 @@ public class PipelineWorkersTests
     [Test]
     public async Task FinalRenderer_GetOutputPath_DifferentIds_ProduceDifferentPaths()
     {
-        var renderer = new FinalRenderer(null!);
+        var renderer = new FinalRenderer(null!, DefaultOptions());
 
         var path1 = renderer.GetOutputPath("aaa");
         var path2 = renderer.GetOutputPath("bbb");

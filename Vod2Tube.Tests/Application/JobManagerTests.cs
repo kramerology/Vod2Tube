@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using TUnit.Core;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
@@ -25,6 +26,8 @@ public class JobManagerTests
         return new AppDbContext(options);
     }
 
+    private static IOptionsSnapshot<AppSettings> DefaultOptions() => DefaultAppSettingsSnapshot.Instance;
+
     /// <summary>
     /// Builds a minimal <see cref="IServiceProvider"/> with all pipeline workers registered.
     /// Optionally substitutes the <see cref="VodDownloader"/> with a custom subclass.
@@ -33,7 +36,8 @@ public class JobManagerTests
     {
         var svc = new ServiceCollection();
         svc.AddDbContext<AppDbContext>(o => o.UseInMemoryDatabase("WorkerProvider"));
-        var ds = new TwitchDownloadService(NullLogger<TwitchDownloadService>.Instance);
+        svc.AddOptions<AppSettings>();
+        var ds = new TwitchDownloadService(NullLogger<TwitchDownloadService>.Instance, Options.Create(new AppSettings()));
         svc.AddSingleton(ds);
         if (vodDownloader != null)
             svc.AddSingleton(vodDownloader);
@@ -341,10 +345,10 @@ public class JobManagerTests
         await using var ctx = CreateInMemoryContext(nameof(ProcessJob_DownloadingVod_OutputExists_SkipsToNextStage));
 
         // Compute all output paths first, then create the job with them pre-populated in the DB
-        var vodDownloader = new VodDownloader(null!);
-        var chatDownloader = new ChatDownloader(null!);
-        var chatRenderer = new ChatRenderer(null!);
-        var finalRenderer = new FinalRenderer(null!);
+        var vodDownloader = new VodDownloader(null!, DefaultOptions());
+        var chatDownloader = new ChatDownloader(null!, DefaultOptions());
+        var chatRenderer = new ChatRenderer(null!, DefaultOptions());
+        var finalRenderer = new FinalRenderer(null!, DefaultOptions());
 
         string vodOutputPath = vodDownloader.GetOutputPath("v1");
         string chatOutputPath = chatDownloader.GetOutputPath("v1");
@@ -395,9 +399,9 @@ public class JobManagerTests
         await using var ctx = CreateInMemoryContext(nameof(ProcessJob_DownloadingChat_OutputExists_SkipsToNextStage));
 
         // Create output files for all downstream stages
-        var chatDownloader = new ChatDownloader(null!);
-        var chatRenderer = new ChatRenderer(null!);
-        var finalRenderer = new FinalRenderer(null!);
+        var chatDownloader = new ChatDownloader(null!, DefaultOptions());
+        var chatRenderer = new ChatRenderer(null!, DefaultOptions());
+        var finalRenderer = new FinalRenderer(null!, DefaultOptions());
 
         string vodTempFile = Path.GetTempFileName();
         string chatOutputPath = chatDownloader.GetOutputPath("v2");
@@ -603,7 +607,7 @@ public class JobManagerTests
     {
         private readonly AppDbContext _ctx;
 
-        public PausingVodDownloader(AppDbContext ctx) : base(null!)
+        public PausingVodDownloader(AppDbContext ctx) : base(null!, DefaultAppSettingsSnapshot.Instance)
         {
             _ctx = ctx;
         }
@@ -627,7 +631,7 @@ public class JobManagerTests
     /// </summary>
     private sealed class ThrowingVodDownloader : VodDownloader
     {
-        public ThrowingVodDownloader() : base(null!) { }
+        public ThrowingVodDownloader() : base(null!, DefaultAppSettingsSnapshot.Instance) { }
 
         public override IAsyncEnumerable<ProgressStatus> RunAsync(string vodId, CancellationToken ct)
             => throw new InvalidOperationException("Simulated download failure");
@@ -639,7 +643,7 @@ public class JobManagerTests
     /// </summary>
     private sealed class PermanentlyFailingVodDownloader : VodDownloader
     {
-        public PermanentlyFailingVodDownloader() : base(null!) { }
+        public PermanentlyFailingVodDownloader() : base(null!, DefaultAppSettingsSnapshot.Instance) { }
 
         public override IAsyncEnumerable<ProgressStatus> RunAsync(string vodId, CancellationToken ct)
             => throw new PipelineJobException("Simulated permanent failure", isPermanent: true);
@@ -740,7 +744,7 @@ public class JobManagerTests
     {
         private readonly AppDbContext _ctx;
 
-        public CancellingVodDownloader(AppDbContext ctx) : base(null!)
+        public CancellingVodDownloader(AppDbContext ctx) : base(null!, DefaultAppSettingsSnapshot.Instance)
         {
             _ctx = ctx;
         }
