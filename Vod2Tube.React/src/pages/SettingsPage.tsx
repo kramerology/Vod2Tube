@@ -67,9 +67,10 @@ function DirectoryBrowserModal({
   const [loading, setLoading] = useState(false);
   const [pathInput, setPathInput] = useState(initialPath);
   const pathInputRef = useRef<HTMLInputElement>(null);
-  const isMountedRef = useRef(true);
+  const isMountedRef = useRef(false);
 
   useEffect(() => {
+    isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
     };
