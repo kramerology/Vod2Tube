@@ -73,8 +73,8 @@ namespace Vod2Tube.Application
             if (dict.TryGetValue(nameof(ChatFontSize),   out v) && int.TryParse(v, out i))     opts.ChatFontSize   = i;
             if (dict.TryGetValue(nameof(ChatUpdateRate), out v) && int.TryParse(v, out i))     opts.ChatUpdateRate = i;
 
-            if (dict.TryGetValue(nameof(ArchiveVodEnabled),       out v) && bool.TryParse(v, out var b)) opts.ArchiveVodEnabled       = b;
-            if (dict.TryGetValue(nameof(ArchiveVodDir),           out v))                                opts.ArchiveVodDir           = v;
+            if (dict.TryGetValue(nameof(ArchiveVodEnabled),        out v) && bool.TryParse(v, out var b)) opts.ArchiveVodEnabled        = b;
+            if (dict.TryGetValue(nameof(ArchiveVodDir),            out v))                                opts.ArchiveVodDir            = v;
             if (dict.TryGetValue(nameof(ArchiveChatJsonEnabled),   out v) && bool.TryParse(v, out b))    opts.ArchiveChatJsonEnabled   = b;
             if (dict.TryGetValue(nameof(ArchiveChatJsonDir),       out v))                               opts.ArchiveChatJsonDir       = v;
             if (dict.TryGetValue(nameof(ArchiveChatRenderEnabled), out v) && bool.TryParse(v, out b))    opts.ArchiveChatRenderEnabled = b;
@@ -103,8 +103,8 @@ namespace Vod2Tube.Application
             [nameof(ChatFontSize)]   = ChatFontSize.ToString(),
             [nameof(ChatUpdateRate)] = ChatUpdateRate.ToString(),
 
-            [nameof(ArchiveVodEnabled)]       = ArchiveVodEnabled.ToString(),
-            [nameof(ArchiveVodDir)]           = ArchiveVodDir,
+            [nameof(ArchiveVodEnabled)]        = ArchiveVodEnabled.ToString(),
+            [nameof(ArchiveVodDir)]            = ArchiveVodDir,
             [nameof(ArchiveChatJsonEnabled)]   = ArchiveChatJsonEnabled.ToString(),
             [nameof(ArchiveChatJsonDir)]       = ArchiveChatJsonDir,
             [nameof(ArchiveChatRenderEnabled)] = ArchiveChatRenderEnabled.ToString(),
