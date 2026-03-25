@@ -720,24 +720,19 @@ export default function SettingsPage() {
       {/* Storage Paths */}
       <SettingsSection icon="folder" title="Storage Paths">
         <DirField
+          label="Temp Directory"
+          value={draft.tempDir}
+          onChange={v => set('tempDir', v)}
+        />
+        <DirField
           label="VOD Download Directory"
           value={draft.vodDownloadDir}
           onChange={v => set('vodDownloadDir', v)}
         />
         <DirField
-          label="VOD Download Temp Directory"
-          value={draft.vodDownloadTempDir}
-          onChange={v => set('vodDownloadTempDir', v)}
-        />
-        <DirField
           label="Chat Render Directory"
           value={draft.chatRenderDir}
           onChange={v => set('chatRenderDir', v)}
-        />
-        <DirField
-          label="Chat Render Temp Directory"
-          value={draft.chatRenderTempDir}
-          onChange={v => set('chatRenderTempDir', v)}
         />
         <DirField
           label="Final Video Directory"
