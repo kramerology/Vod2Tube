@@ -7,6 +7,7 @@ using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
 using Vod2Tube.Application;
 using Vod2Tube.Application.Models;
+using Vod2Tube.Application.PipelineWorkers;
 using Vod2Tube.Domain;
 using Vod2Tube.Infrastructure;
 
@@ -37,6 +38,7 @@ public class JobManagerTests
         var svc = new ServiceCollection();
         svc.AddDbContext<AppDbContext>(o => o.UseInMemoryDatabase("WorkerProvider"));
         svc.AddOptions<AppSettings>();
+        svc.AddLogging();
         var ds = new TwitchDownloadService(NullLogger<TwitchDownloadService>.Instance, Options.Create(new AppSettings()));
         svc.AddSingleton(ds);
         if (vodDownloader != null)
@@ -50,6 +52,7 @@ public class JobManagerTests
             svc.AddSingleton(videoUploader);
         else
             svc.AddSingleton<VideoUploader>();
+        svc.AddSingleton<Archiver>();
         return svc.BuildServiceProvider();
     }
 
@@ -147,7 +150,9 @@ public class JobManagerTests
             "PendingCombining",
             "Combining",
             "PendingUpload",
-            "Uploading"
+            "Uploading",
+            "PendingArchiving",
+            "Archiving"
         ];
 
         await Assert.That(JobManager.StagePriority).IsEquivalentTo(expected);
@@ -734,6 +739,145 @@ public class JobManagerTests
         // Processing should have stopped: job is Cancelled (not uploaded) and not marked as failed.
         await Assert.That(job.Stage).IsEqualTo("Cancelled");
         await Assert.That(job.Failed).IsEqualTo(false);
+    }
+
+
+    // =========================================================================
+    // Archiving stage
+    // =========================================================================
+
+    [Test]
+    public async Task FindHighestPriorityJob_ArchivingBeatsUploading()
+    {
+        await using var ctx = CreateInMemoryContext(nameof(FindHighestPriorityJob_ArchivingBeatsUploading));
+        ctx.Pipelines.Add(new Pipeline { VodId = "archiving",  Stage = "Archiving" });
+        ctx.Pipelines.Add(new Pipeline { VodId = "uploading",  Stage = "Uploading" });
+        ctx.Pipelines.Add(new Pipeline { VodId = "pending",    Stage = "Pending" });
+        await ctx.SaveChangesAsync();
+
+        var result = await JobManager.FindHighestPriorityJobAsync(ctx, CancellationToken.None);
+
+        await Assert.That(result!.VodId).IsEqualTo("archiving");
+    }
+
+    [Test]
+    public async Task FindHighestPriorityJob_PendingArchivingBeatsUploading()
+    {
+        await using var ctx = CreateInMemoryContext(nameof(FindHighestPriorityJob_PendingArchivingBeatsUploading));
+        ctx.Pipelines.Add(new Pipeline { VodId = "pending_archiving", Stage = "PendingArchiving" });
+        ctx.Pipelines.Add(new Pipeline { VodId = "uploading",         Stage = "Uploading" });
+        await ctx.SaveChangesAsync();
+
+        var result = await JobManager.FindHighestPriorityJobAsync(ctx, CancellationToken.None);
+
+        await Assert.That(result!.VodId).IsEqualTo("pending_archiving");
+    }
+
+    [Test]
+    public async Task ProcessJob_PendingArchiving_ArchivesAndDeletesFilesAndTransitionsToUploaded()
+    {
+        await using var ctx = CreateInMemoryContext(nameof(ProcessJob_PendingArchiving_ArchivesAndDeletesFilesAndTransitionsToUploaded));
+
+        // Create real temp files to simulate pipeline outputs.
+        string vodFile   = Path.GetTempFileName();
+        string chatJson  = Path.GetTempFileName();
+        string chatVideo = Path.GetTempFileName();
+        string finalVideo = Path.GetTempFileName();
+
+        try
+        {
+            File.WriteAllText(vodFile,    "fake vod");
+            File.WriteAllText(chatJson,   "{}");
+            File.WriteAllText(chatVideo,  "fake chat video");
+            File.WriteAllText(finalVideo, "fake final video");
+
+            var job = new Pipeline
+            {
+                VodId             = "v1",
+                Stage             = "PendingArchiving",
+                VodFilePath       = vodFile,
+                ChatTextFilePath  = chatJson,
+                ChatVideoFilePath = chatVideo,
+                FinalVideoFilePath = finalVideo,
+            };
+            ctx.Pipelines.Add(job);
+            await ctx.SaveChangesAsync();
+
+            await JobManager.ProcessJobToCompletionAsync(job, ctx, CreateWorkerProvider(), NullLogger.Instance, CancellationToken.None);
+
+            // Job should have progressed to Uploaded.
+            await Assert.That(job.Stage).IsEqualTo("Uploaded");
+
+            // All working files should have been deleted (archive is disabled by default).
+            await Assert.That(File.Exists(vodFile)).IsEqualTo(false);
+            await Assert.That(File.Exists(chatJson)).IsEqualTo(false);
+            await Assert.That(File.Exists(chatVideo)).IsEqualTo(false);
+            await Assert.That(File.Exists(finalVideo)).IsEqualTo(false);
+        }
+        finally
+        {
+            // Best-effort cleanup in case the test failed mid-way.
+            foreach (var f in new[] { vodFile, chatJson, chatVideo, finalVideo })
+                if (File.Exists(f)) File.Delete(f);
+        }
+    }
+
+    [Test]
+    public async Task ProcessJob_PendingArchiving_CopiesFilesToArchiveDirAndDeletesOriginals()
+    {
+        await using var ctx = CreateInMemoryContext(nameof(ProcessJob_PendingArchiving_CopiesFilesToArchiveDirAndDeletesOriginals));
+
+        string archiveDir = Path.Combine(Path.GetTempPath(), $"Vod2Tube_ArchiveTest_{Guid.NewGuid():N}");
+        string vodFile = Path.GetTempFileName();
+
+        try
+        {
+            File.WriteAllText(vodFile, "fake vod content");
+
+            // Use an options snapshot that has archive enabled for VOD only.
+            var archiveOptions = new DefaultAppSettingsSnapshot();
+            archiveOptions.Value.ArchiveVodEnabled = true;
+            archiveOptions.Value.ArchiveVodDir     = archiveDir;
+
+            var job = new Pipeline
+            {
+                VodId       = "v1",
+                Stage       = "PendingArchiving",
+                VodFilePath = vodFile,
+            };
+            ctx.Pipelines.Add(job);
+            await ctx.SaveChangesAsync();
+
+            var svc = new ServiceCollection();
+            svc.AddDbContext<AppDbContext>(o => o.UseInMemoryDatabase("ArchiveCopyTest"));
+            svc.AddLogging();
+            svc.AddOptions<AppSettings>();
+            var ds = new TwitchDownloadService(NullLogger<TwitchDownloadService>.Instance, Options.Create(new AppSettings()));
+            svc.AddSingleton(ds);
+            svc.AddSingleton<VodDownloader>();
+            svc.AddSingleton<ChatDownloader>();
+            svc.AddSingleton<ChatRenderer>();
+            svc.AddSingleton<FinalRenderer>();
+            svc.AddSingleton<VideoUploader>();
+            svc.AddSingleton(new Archiver(archiveOptions, NullLogger<Archiver>.Instance));
+            var provider = svc.BuildServiceProvider();
+
+            await JobManager.ProcessJobToCompletionAsync(job, ctx, provider, NullLogger.Instance, CancellationToken.None);
+
+            await Assert.That(job.Stage).IsEqualTo("Uploaded");
+
+            // The original working file should have been deleted.
+            await Assert.That(File.Exists(vodFile)).IsEqualTo(false);
+
+            // The archive copy should exist.
+            string expectedArchived = Path.Combine(archiveDir, Path.GetFileName(vodFile));
+            await Assert.That(File.Exists(expectedArchived)).IsEqualTo(true);
+        }
+        finally
+        {
+            if (File.Exists(vodFile)) File.Delete(vodFile);
+            if (Directory.Exists(archiveDir)) Directory.Delete(archiveDir, recursive: true);
+        }
     }
 
     /// <summary>

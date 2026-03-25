@@ -34,7 +34,24 @@ namespace Vod2Tube.Application
         public int ChatFontSize { get; set; } = 15;
         public int ChatUpdateRate { get; set; } = 0;
 
-        // ── Serialisation helpers ─────────────────────────────────────────────
+        // ── Archiving ────────────────────────────────────────────────────────────────────
+        // When enabled, the corresponding file is copied to the specified archive
+        // directory after upload completes.  Files that are not archived are
+        // deleted from the working storage directories.
+
+        public bool ArchiveVodEnabled { get; set; } = false;
+        public string ArchiveVodDir { get; set; } = string.Empty;
+
+        public bool ArchiveChatJsonEnabled { get; set; } = false;
+        public string ArchiveChatJsonDir { get; set; } = string.Empty;
+
+        public bool ArchiveChatRenderEnabled { get; set; } = false;
+        public string ArchiveChatRenderDir { get; set; } = string.Empty;
+
+        public bool ArchiveFinalVideoEnabled { get; set; } = false;
+        public string ArchiveFinalVideoDir { get; set; } = string.Empty;
+
+                // ── Serialisation helpers ─────────────────────────────────────────────
 
         /// <summary>
         /// Applies a dictionary of raw key/value pairs (from the DB) onto an
@@ -55,6 +72,15 @@ namespace Vod2Tube.Application
             if (dict.TryGetValue(nameof(ChatWidth),      out v) && int.TryParse(v, out var i)) opts.ChatWidth      = i;
             if (dict.TryGetValue(nameof(ChatFontSize),   out v) && int.TryParse(v, out i))     opts.ChatFontSize   = i;
             if (dict.TryGetValue(nameof(ChatUpdateRate), out v) && int.TryParse(v, out i))     opts.ChatUpdateRate = i;
+
+            if (dict.TryGetValue(nameof(ArchiveVodEnabled),       out v) && bool.TryParse(v, out var b)) opts.ArchiveVodEnabled       = b;
+            if (dict.TryGetValue(nameof(ArchiveVodDir),           out v))                                opts.ArchiveVodDir           = v;
+            if (dict.TryGetValue(nameof(ArchiveChatJsonEnabled),   out v) && bool.TryParse(v, out b))    opts.ArchiveChatJsonEnabled   = b;
+            if (dict.TryGetValue(nameof(ArchiveChatJsonDir),       out v))                               opts.ArchiveChatJsonDir       = v;
+            if (dict.TryGetValue(nameof(ArchiveChatRenderEnabled), out v) && bool.TryParse(v, out b))    opts.ArchiveChatRenderEnabled = b;
+            if (dict.TryGetValue(nameof(ArchiveChatRenderDir),     out v))                               opts.ArchiveChatRenderDir     = v;
+            if (dict.TryGetValue(nameof(ArchiveFinalVideoEnabled), out v) && bool.TryParse(v, out b))    opts.ArchiveFinalVideoEnabled = b;
+            if (dict.TryGetValue(nameof(ArchiveFinalVideoDir),     out v))                               opts.ArchiveFinalVideoDir     = v;
         }
 
         /// <summary>
@@ -76,6 +102,15 @@ namespace Vod2Tube.Application
             [nameof(ChatWidth)]      = ChatWidth.ToString(),
             [nameof(ChatFontSize)]   = ChatFontSize.ToString(),
             [nameof(ChatUpdateRate)] = ChatUpdateRate.ToString(),
+
+            [nameof(ArchiveVodEnabled)]       = ArchiveVodEnabled.ToString(),
+            [nameof(ArchiveVodDir)]           = ArchiveVodDir,
+            [nameof(ArchiveChatJsonEnabled)]   = ArchiveChatJsonEnabled.ToString(),
+            [nameof(ArchiveChatJsonDir)]       = ArchiveChatJsonDir,
+            [nameof(ArchiveChatRenderEnabled)] = ArchiveChatRenderEnabled.ToString(),
+            [nameof(ArchiveChatRenderDir)]     = ArchiveChatRenderDir,
+            [nameof(ArchiveFinalVideoEnabled)] = ArchiveFinalVideoEnabled.ToString(),
+            [nameof(ArchiveFinalVideoDir)]     = ArchiveFinalVideoDir,
         };
     }
 }
