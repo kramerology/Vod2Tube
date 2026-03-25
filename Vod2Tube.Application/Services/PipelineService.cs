@@ -24,7 +24,9 @@ namespace Vod2Tube.Application.Services
             "PendingCombining",
             "Combining",
             "PendingUpload",
-            "Uploading"
+            "Uploading",
+            "PendingArchiving",
+            "Archiving"
         };
 
         public PipelineService(AppDbContext dbContext, ILogger<PipelineService> logger)

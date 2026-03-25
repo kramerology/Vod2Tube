@@ -2,6 +2,7 @@ using Vod2Tube.Application;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
+using Vod2Tube.Application.PipelineWorkers;
 using Vod2Tube.Application.Services;
 using Vod2Tube.Infrastructure;
 using Microsoft.EntityFrameworkCore;
@@ -43,6 +44,7 @@ try
             services.AddScoped<ChatRenderer>();
             services.AddScoped<FinalRenderer>();
             services.AddScoped<VideoUploader>();
+            services.AddScoped<Archiver>();
             services.AddScoped<TwitchGraphQLService>();
             services.AddScoped<TwitchDownloadService>();
 

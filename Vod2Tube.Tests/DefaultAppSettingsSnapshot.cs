@@ -28,6 +28,10 @@ internal sealed class DefaultAppSettingsSnapshot : IOptionsSnapshot<AppSettings>
             VodDownloadDir = Path.Combine(root, "downloads"),
             ChatRenderDir  = Path.Combine(root, "renders"),
             FinalVideoDir  = Path.Combine(root, "output"),
+            ArchiveVodDir           = Path.Combine(root, "archive", "vod"),
+            ArchiveChatJsonDir      = Path.Combine(root, "archive", "chat-json"),
+            ArchiveChatRenderDir    = Path.Combine(root, "archive", "chat-render"),
+            ArchiveFinalVideoDir    = Path.Combine(root, "archive", "final"),
         };
     }
 
