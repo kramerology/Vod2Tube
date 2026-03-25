@@ -7,19 +7,26 @@ namespace Vod2Tube.Application
     public class AppSettings
     {
         // ── Tool paths ────────────────────────────────────────────────────────
+        // Defaults point to a "tools" folder next to the application binary.
+        // Append .exe on Windows; no extension on Linux/macOS.
 
-        public string TwitchDownloaderCliPath { get; set; } = "TwitchDownloaderCLI";
-        public string FfmpegPath { get; set; } = "ffmpeg";
-        public string FfprobePath { get; set; } = "ffprobe";
-        public string YtDlpPath { get; set; } = "yt-dlp";
+        private static string ToolPath(string name) =>
+            Path.Combine(AppContext.BaseDirectory, "tools",
+                OperatingSystem.IsWindows() ? name + ".exe" : name);
+
+        public string TwitchDownloaderCliPath { get; set; } = ToolPath("TwitchDownloaderCLI");
+        public string FfmpegPath { get; set; } = ToolPath("ffmpeg");
+        public string FfprobePath { get; set; } = ToolPath("ffprobe");
+        public string YtDlpPath { get; set; } = ToolPath("yt-dlp");
 
         // ── Storage directories ───────────────────────────────────────────────
+        // Defaults are placed under a "storage" sub-folder next to the
+        // application binary so all data stays in one predictable location.
 
-        public string VodDownloadTempDir { get; set; } = "VodDownloadsTemp";
-        public string VodDownloadDir { get; set; } = "VodDownloads";
-        public string ChatRenderTempDir { get; set; } = "ChatRenderTemp";
-        public string ChatRenderDir { get; set; } = "ChatRenders";
-        public string FinalVideoDir { get; set; } = "FinalVideos";
+        public string TempDir { get; set; } = Path.Combine(AppContext.BaseDirectory, "storage", "temp");
+        public string VodDownloadDir { get; set; } = Path.Combine(AppContext.BaseDirectory, "storage", "downloads");
+        public string ChatRenderDir { get; set; } = Path.Combine(AppContext.BaseDirectory, "storage", "renders");
+        public string FinalVideoDir { get; set; } = Path.Combine(AppContext.BaseDirectory, "storage", "output");
 
         // ── Chat rendering ────────────────────────────────────────────────────
 
@@ -40,11 +47,10 @@ namespace Vod2Tube.Application
             if (dict.TryGetValue(nameof(FfprobePath),             out v))     opts.FfprobePath             = v;
             if (dict.TryGetValue(nameof(YtDlpPath),               out v))     opts.YtDlpPath               = v;
 
-            if (dict.TryGetValue(nameof(VodDownloadTempDir), out v)) opts.VodDownloadTempDir = v;
-            if (dict.TryGetValue(nameof(VodDownloadDir),     out v)) opts.VodDownloadDir     = v;
-            if (dict.TryGetValue(nameof(ChatRenderTempDir),  out v)) opts.ChatRenderTempDir  = v;
-            if (dict.TryGetValue(nameof(ChatRenderDir),      out v)) opts.ChatRenderDir      = v;
-            if (dict.TryGetValue(nameof(FinalVideoDir),      out v)) opts.FinalVideoDir      = v;
+            if (dict.TryGetValue(nameof(TempDir),       out v)) opts.TempDir       = v;
+            if (dict.TryGetValue(nameof(VodDownloadDir), out v)) opts.VodDownloadDir = v;
+            if (dict.TryGetValue(nameof(ChatRenderDir),  out v)) opts.ChatRenderDir  = v;
+            if (dict.TryGetValue(nameof(FinalVideoDir),  out v)) opts.FinalVideoDir  = v;
 
             if (dict.TryGetValue(nameof(ChatWidth),      out v) && int.TryParse(v, out var i)) opts.ChatWidth      = i;
             if (dict.TryGetValue(nameof(ChatFontSize),   out v) && int.TryParse(v, out i))     opts.ChatFontSize   = i;
@@ -62,11 +68,10 @@ namespace Vod2Tube.Application
             [nameof(FfprobePath)]             = FfprobePath,
             [nameof(YtDlpPath)]               = YtDlpPath,
 
-            [nameof(VodDownloadTempDir)] = VodDownloadTempDir,
-            [nameof(VodDownloadDir)]     = VodDownloadDir,
-            [nameof(ChatRenderTempDir)]  = ChatRenderTempDir,
-            [nameof(ChatRenderDir)]      = ChatRenderDir,
-            [nameof(FinalVideoDir)]      = FinalVideoDir,
+            [nameof(TempDir)]       = TempDir,
+            [nameof(VodDownloadDir)] = VodDownloadDir,
+            [nameof(ChatRenderDir)]  = ChatRenderDir,
+            [nameof(FinalVideoDir)]  = FinalVideoDir,
 
             [nameof(ChatWidth)]      = ChatWidth.ToString(),
             [nameof(ChatFontSize)]   = ChatFontSize.ToString(),

@@ -24,11 +24,10 @@ internal sealed class DefaultAppSettingsSnapshot : IOptionsSnapshot<AppSettings>
         var root = Path.Combine(Path.GetTempPath(), $"Vod2Tube_Tests_{Guid.NewGuid():N}");
         _value = new AppSettings
         {
-            VodDownloadTempDir = Path.Combine(root, "VodDownloadsTemp"),
-            VodDownloadDir     = Path.Combine(root, "VodDownloads"),
-            ChatRenderTempDir  = Path.Combine(root, "ChatRenderTemp"),
-            ChatRenderDir      = Path.Combine(root, "ChatRenders"),
-            FinalVideoDir      = Path.Combine(root, "FinalVideos"),
+            TempDir        = Path.Combine(root, "temp"),
+            VodDownloadDir = Path.Combine(root, "downloads"),
+            ChatRenderDir  = Path.Combine(root, "renders"),
+            FinalVideoDir  = Path.Combine(root, "output"),
         };
     }
 
