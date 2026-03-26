@@ -67,9 +67,10 @@ function DirectoryBrowserModal({
   const [loading, setLoading] = useState(false);
   const [pathInput, setPathInput] = useState(initialPath);
   const pathInputRef = useRef<HTMLInputElement>(null);
-  const isMountedRef = useRef(true);
+  const isMountedRef = useRef(false);
 
   useEffect(() => {
+    isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
     };
@@ -598,6 +599,82 @@ function FileField({
   );
 }
 
+
+// ── Archive field (toggle + dir picker) ──────────────────────────────────────
+
+function ArchiveField({
+  label,
+  enabled,
+  dir,
+  onEnabledChange,
+  onDirChange,
+}: {
+  label: string;
+  enabled: boolean;
+  dir: string;
+  onEnabledChange: (v: boolean) => void;
+  onDirChange: (v: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="col-span-2">
+      <label className="block mb-2 text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">
+        {label}
+      </label>
+      <div className="flex flex-col gap-2">
+        {/* Enable toggle */}
+        <button
+          type="button"
+          onClick={() => onEnabledChange(!enabled)}
+          className={`flex items-center gap-3 px-4 py-2.5 rounded-lg border transition-all w-fit ${
+            enabled
+              ? 'bg-primary/10 border-primary/40 text-primary'
+              : 'bg-surface-container-highest border-outline-variant/20 text-on-surface-variant'
+          }`}
+        >
+          <span className="material-symbols-outlined text-base">
+            {enabled ? 'check_box' : 'check_box_outline_blank'}
+          </span>
+          <span className="text-sm font-medium">
+            {enabled ? 'Archive enabled' : 'Archive disabled'}
+          </span>
+        </button>
+
+        {/* Directory picker — only shown when enabled */}
+        {enabled && (
+          <>
+            <div className="flex items-stretch gap-2">
+              <input
+                type="text"
+                className="flex-1 min-w-0 bg-surface-container-highest border border-outline-variant/20 rounded-lg py-2.5 px-4 text-on-surface text-sm focus:outline-none focus:ring-1 focus:ring-primary/50 transition-all font-mono placeholder:text-on-surface-variant/50"
+                value={dir}
+                placeholder="Select archive directory…"
+                onChange={e => onDirChange(e.target.value)}
+              />
+              <button
+                type="button"
+                onClick={() => setOpen(true)}
+                className="shrink-0 flex items-center justify-center w-10 rounded-lg bg-surface-container-highest border border-outline-variant/20 text-on-surface-variant hover:text-primary hover:border-primary/40 hover:bg-primary/5 transition-all material-symbols-outlined text-lg"
+                title="Browse…"
+              >
+                folder_open
+              </button>
+            </div>
+            {open && (
+              <DirectoryBrowserModal
+                initialPath={dir}
+                onSelect={path => { onDirChange(path); setOpen(false); }}
+                onClose={() => setOpen(false)}
+              />
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
@@ -760,6 +837,45 @@ export default function SettingsPage() {
           value={String(draft.chatUpdateRate)}
           type="number"
           onChange={v => set('chatUpdateRate', Number(v))}
+        />
+      </SettingsSection>
+
+      {/* Archiving */}
+      <SettingsSection icon="archive" title="Archiving">
+        <div className="col-span-2 mb-1">
+          <p className="text-xs text-on-surface-variant leading-relaxed">
+            After a VOD is uploaded, each file below can be copied to a long-term archive
+            directory. Files that are <strong className="text-on-surface">not</strong> archived
+            are deleted from working storage once the job completes.
+          </p>
+        </div>
+        <ArchiveField
+          label="VOD Download"
+          enabled={draft.archiveVodEnabled}
+          dir={draft.archiveVodDir}
+          onEnabledChange={v => set('archiveVodEnabled', v)}
+          onDirChange={v => set('archiveVodDir', v)}
+        />
+        <ArchiveField
+          label="Chat JSON"
+          enabled={draft.archiveChatJsonEnabled}
+          dir={draft.archiveChatJsonDir}
+          onEnabledChange={v => set('archiveChatJsonEnabled', v)}
+          onDirChange={v => set('archiveChatJsonDir', v)}
+        />
+        <ArchiveField
+          label="Chat Render"
+          enabled={draft.archiveChatRenderEnabled}
+          dir={draft.archiveChatRenderDir}
+          onEnabledChange={v => set('archiveChatRenderEnabled', v)}
+          onDirChange={v => set('archiveChatRenderDir', v)}
+        />
+        <ArchiveField
+          label="Final Video"
+          enabled={draft.archiveFinalVideoEnabled}
+          dir={draft.archiveFinalVideoDir}
+          onEnabledChange={v => set('archiveFinalVideoEnabled', v)}
+          onDirChange={v => set('archiveFinalVideoDir', v)}
         />
       </SettingsSection>
     </>

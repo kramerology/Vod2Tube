@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Vod2Tube.Application.Models;
+using Vod2Tube.Application.PipelineWorkers;
 using Vod2Tube.Domain;
 using Vod2Tube.Infrastructure;
 
@@ -28,7 +29,9 @@ namespace Vod2Tube.Application
             "PendingCombining",
             "Combining",
             "PendingUpload",
-            "Uploading"
+            "Uploading",
+            "PendingArchiving",
+            "Archiving"
         ];
 
         public JobManager(IServiceScopeFactory scopeFactory, ILogger<JobManager> logger)
@@ -95,17 +98,7 @@ namespace Vod2Tube.Application
                 .Where(p => !dbContext.TwitchVods
                     .Where(v => v.Id == p.VodId)
                     .Any(v => dbContext.Channels.Any(c => c.ChannelName == v.ChannelName && !c.Active)))
-                .OrderByDescending(p =>
-                    p.Stage == "Uploading"            ? 9 :
-                    p.Stage == "PendingUpload"        ? 8 :
-                    p.Stage == "Combining"            ? 7 :
-                    p.Stage == "PendingCombining"     ? 6 :
-                    p.Stage == "RenderingChat"        ? 5 :
-                    p.Stage == "PendingRenderingChat" ? 4 :
-                    p.Stage == "DownloadingChat"      ? 3 :
-                    p.Stage == "PendingDownloadChat"  ? 2 :
-                    p.Stage == "DownloadingVod"       ? 1 :
-                    /* Pending */                       0)
+                .OrderByDescending(p => Array.IndexOf(StagePriority, p.Stage))
                 .ThenBy(p => p.VodId)
                 .FirstOrDefaultAsync(ct);
         }
@@ -234,6 +227,7 @@ namespace Vod2Tube.Application
             var chatRenderer   = services.GetRequiredService<ChatRenderer>();
             var finalRenderer  = services.GetRequiredService<FinalRenderer>();
             var videoUploader  = services.GetRequiredService<VideoUploader>();
+            var archiver       = services.GetRequiredService<Archiver>();
 
             logger.LogInformation("Processing job {VodId} from stage: {Stage}", job.VodId, job.Stage);
 
@@ -481,6 +475,41 @@ namespace Vod2Tube.Application
                         }
                     }
                     // After upload completes, check pause, channel pause, and cancellation before advancing stage.
+                    if (await DetectAndApplyPauseAsync(dbContext, job, logger, ct))
+                        return;
+                    if (await DetectAndApplyChannelPauseAsync(dbContext, job, logger, ct))
+                        return;
+                    if (await DetectAndApplyCancelAsync(dbContext, job, logger, ct))
+                        return;
+                    Console.WriteLine(); // end the in-place progress line
+                    await SetStageAsync(dbContext, job, "PendingArchiving", ct);
+                }
+
+                if (job.Stage == "PendingArchiving" || job.Stage == "Archiving")
+                {
+                    await SetStageAsync(dbContext, job, "Archiving", ct);
+                    DateTime lastUpdate = DateTime.MinValue;
+                    await foreach (var status in archiver.RunAsync(job.VodId, job.VodFilePath, job.ChatTextFilePath, job.ChatVideoFilePath, job.FinalVideoFilePath, ct))
+                    {
+                        if (DateTime.UtcNow - lastUpdate >= TimeSpan.FromSeconds(2))
+                        {
+                            lastUpdate = DateTime.UtcNow;
+                            ApplyProgress(job, status);
+                            using (logger.BeginScope(new Dictionary<string, object?> { ["IsProgress"] = true }))
+                                logger.LogInformation("{Status}", status.Message);
+                            try { await dbContext.SaveChangesAsync(ct); }
+                            catch (Exception ex) { logger.LogWarning(ex, "Failed to save progress for job {VodId}", job.VodId); }
+
+                            // During archiving, periodically detect and apply pause/cancel/channel-pause signals.
+                            if (await DetectAndApplyPauseAsync(dbContext, job, logger, ct))
+                                return;
+                            if (await DetectAndApplyChannelPauseAsync(dbContext, job, logger, ct))
+                                return;
+                            if (await DetectAndApplyCancelAsync(dbContext, job, logger, ct))
+                                return;
+                        }
+                    }
+                    // After archiving completes, check pause, channel pause, and cancellation before advancing stage.
                     if (await DetectAndApplyPauseAsync(dbContext, job, logger, ct))
                         return;
                     if (await DetectAndApplyChannelPauseAsync(dbContext, job, logger, ct))
