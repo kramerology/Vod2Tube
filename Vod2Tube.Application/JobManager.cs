@@ -511,8 +511,23 @@ namespace Vod2Tube.Application
                                 logger.LogInformation("{Status}", status.Message);
                             try { await dbContext.SaveChangesAsync(ct); }
                             catch (Exception ex) { logger.LogWarning(ex, "Failed to save progress for job {VodId}", job.VodId); }
+
+                            // During archiving, periodically detect and apply pause/cancel/channel-pause signals.
+                            if (await DetectAndApplyPauseAsync(dbContext, job, logger, ct))
+                                return;
+                            if (await DetectAndApplyChannelPauseAsync(dbContext, job, logger, ct))
+                                return;
+                            if (await DetectAndApplyCancelAsync(dbContext, job, logger, ct))
+                                return;
                         }
                     }
+                    // After archiving completes, check pause, channel pause, and cancellation before advancing stage.
+                    if (await DetectAndApplyPauseAsync(dbContext, job, logger, ct))
+                        return;
+                    if (await DetectAndApplyChannelPauseAsync(dbContext, job, logger, ct))
+                        return;
+                    if (await DetectAndApplyCancelAsync(dbContext, job, logger, ct))
+                        return;
                     Console.WriteLine(); // end the in-place progress line
                     await SetStageAsync(dbContext, job, "Uploaded", ct);
                 }
