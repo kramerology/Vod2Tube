@@ -93,14 +93,17 @@ namespace Vod2Tube.Application
 
         internal static async Task<Pipeline?> FindHighestPriorityJobAsync(AppDbContext dbContext, CancellationToken ct)
         {
-            return await dbContext.Pipelines
+            var candidates = await dbContext.Pipelines
                 .Where(p => StagePriority.Contains(p.Stage) && !p.Failed && !p.Paused)
                 .Where(p => !dbContext.TwitchVods
                     .Where(v => v.Id == p.VodId)
                     .Any(v => dbContext.Channels.Any(c => c.ChannelName == v.ChannelName && !c.Active)))
+                .ToListAsync(ct);
+
+            return candidates
                 .OrderByDescending(p => Array.IndexOf(StagePriority, p.Stage))
                 .ThenBy(p => p.VodId)
-                .FirstOrDefaultAsync(ct);
+                .FirstOrDefault();
         }
 
         private static async Task SetStageAsync(AppDbContext dbContext, Pipeline job, string stage, CancellationToken ct)
