@@ -34,11 +34,17 @@ namespace Vod2Tube.Application.PipelineWorkers
 
 
         /// <summary>
-        /// Computes the expected archive destination paths for each pipeline file based on
-        /// the current archive settings.  A path is only returned when archiving is enabled
-        /// and a source file path is provided; otherwise the corresponding string is empty.
-        /// This can be called <em>after</em> <see cref="RunAsync"/> completes to obtain the
-        /// paths that were written during the archive run.
+        /// Returns the archive destination paths that were actually written to disk during
+        /// the most recent <see cref="RunAsync"/> call.  A non-empty path is returned for a
+        /// given artifact only when <em>all three</em> of the following are true:
+        /// <list type="bullet">
+        ///   <item><description>archiving is enabled for that artifact type in <see cref="AppSettings"/>,</description></item>
+        ///   <item><description>the corresponding archive directory is configured, and</description></item>
+        ///   <item><description>the destination file exists on disk (i.e. the copy succeeded).</description></item>
+        /// </list>
+        /// For any artifact that does not satisfy all three conditions the corresponding
+        /// string is empty, so callers and the UI can safely treat a non-empty value as a
+        /// confirmed, accessible archive path.
         /// </summary>
         public ArchiveResult ComputeArchivePaths(
             string? vodFilePath,
