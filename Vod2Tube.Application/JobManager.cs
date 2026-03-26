@@ -98,19 +98,7 @@ namespace Vod2Tube.Application
                 .Where(p => !dbContext.TwitchVods
                     .Where(v => v.Id == p.VodId)
                     .Any(v => dbContext.Channels.Any(c => c.ChannelName == v.ChannelName && !c.Active)))
-                .OrderByDescending(p =>
-                    p.Stage == "Archiving"            ? 11 :
-                    p.Stage == "PendingArchiving"     ? 10 :
-                    p.Stage == "Uploading"            ?  9 :
-                    p.Stage == "PendingUpload"        ?  8 :
-                    p.Stage == "Combining"            ?  7 :
-                    p.Stage == "PendingCombining"     ?  6 :
-                    p.Stage == "RenderingChat"        ?  5 :
-                    p.Stage == "PendingRenderingChat" ?  4 :
-                    p.Stage == "DownloadingChat"      ?  3 :
-                    p.Stage == "PendingDownloadChat"  ?  2 :
-                    p.Stage == "DownloadingVod"       ?  1 :
-                    /* Pending */                        0)
+                .OrderByDescending(p => Array.IndexOf(StagePriority, p.Stage))
                 .ThenBy(p => p.VodId)
                 .FirstOrDefaultAsync(ct);
         }
