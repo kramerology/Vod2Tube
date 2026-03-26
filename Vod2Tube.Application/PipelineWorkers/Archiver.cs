@@ -49,19 +49,25 @@ namespace Vod2Tube.Application.PipelineWorkers
             var s = _options.Value;
             return new ArchiveResult
             {
-                ArchivedVodPath = s.ArchiveVodEnabled && !string.IsNullOrWhiteSpace(s.ArchiveVodDir) && !string.IsNullOrEmpty(vodFilePath)
-                    ? Path.Combine(s.ArchiveVodDir, Path.GetFileName(vodFilePath))
-                    : string.Empty,
-                ArchivedChatJsonPath = s.ArchiveChatJsonEnabled && !string.IsNullOrWhiteSpace(s.ArchiveChatJsonDir) && !string.IsNullOrEmpty(chatTextFilePath)
-                    ? Path.Combine(s.ArchiveChatJsonDir, Path.GetFileName(chatTextFilePath))
-                    : string.Empty,
-                ArchivedChatRenderPath = s.ArchiveChatRenderEnabled && !string.IsNullOrWhiteSpace(s.ArchiveChatRenderDir) && !string.IsNullOrEmpty(chatVideoFilePath)
-                    ? Path.Combine(s.ArchiveChatRenderDir, Path.GetFileName(chatVideoFilePath))
-                    : string.Empty,
-                ArchivedFinalVideoPath = s.ArchiveFinalVideoEnabled && !string.IsNullOrWhiteSpace(s.ArchiveFinalVideoDir) && !string.IsNullOrEmpty(finalVideoFilePath)
-                    ? Path.Combine(s.ArchiveFinalVideoDir, Path.GetFileName(finalVideoFilePath))
-                    : string.Empty,
+                ArchivedVodPath        = ResolveArchivedPath(s.ArchiveVodEnabled,        s.ArchiveVodDir,        vodFilePath),
+                ArchivedChatJsonPath   = ResolveArchivedPath(s.ArchiveChatJsonEnabled,   s.ArchiveChatJsonDir,   chatTextFilePath),
+                ArchivedChatRenderPath = ResolveArchivedPath(s.ArchiveChatRenderEnabled, s.ArchiveChatRenderDir, chatVideoFilePath),
+                ArchivedFinalVideoPath = ResolveArchivedPath(s.ArchiveFinalVideoEnabled, s.ArchiveFinalVideoDir, finalVideoFilePath),
             };
+        }
+
+        /// <summary>
+        /// Returns the archive destination path only when archiving is enabled, a directory
+        /// is configured, a source path was set, AND the destination file actually exists on
+        /// disk.  Returning an empty string for any other case prevents the UI from
+        /// displaying a file-explorer button for a file that was never archived.
+        /// </summary>
+        private static string ResolveArchivedPath(bool enabled, string? archiveDir, string? sourceFilePath)
+        {
+            if (!enabled || string.IsNullOrWhiteSpace(archiveDir) || string.IsNullOrEmpty(sourceFilePath))
+                return string.Empty;
+            var dest = Path.Combine(archiveDir, Path.GetFileName(sourceFilePath));
+            return File.Exists(dest) ? dest : string.Empty;
         }
 
         /// <summary>

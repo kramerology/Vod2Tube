@@ -124,13 +124,17 @@ function StepCard({
   const status = getStepStatus(step, job);
   const filePaths = getStepFilePaths(step, job);
   const [revealing, setRevealing] = useState<string | null>(null);
+  const [revealError, setRevealError] = useState<string | null>(null);
 
   async function reveal(path: string) {
     setRevealing(path);
+    setRevealError(null);
     try {
       await filesystemApi.reveal(path);
-    } catch {
-      // ignore — server will open the OS file manager
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      const isNotFound = msg.includes('404') || msg.toLowerCase().includes('not found');
+      setRevealError(isNotFound ? 'File not found on disk' : 'Could not open file explorer');
     } finally {
       setRevealing(null);
     }
@@ -198,19 +202,27 @@ function StepCard({
 
       {/* File path buttons */}
       {filePaths.length > 0 && (
-        <div className="mt-2 flex flex-wrap gap-1.5">
-          {filePaths.map(({ label, path }) => (
-            <button
-              key={path}
-              onClick={() => reveal(path)}
-              disabled={revealing === path}
-              className="flex items-center gap-1 px-2 py-1 rounded bg-surface-container-highest hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-colors text-[10px] font-medium disabled:opacity-50"
-              title={path}
-            >
-              <span className="material-symbols-outlined text-xs leading-none">folder_open</span>
-              {revealing === path ? 'Opening…' : label}
-            </button>
-          ))}
+        <div className="mt-2 flex flex-col gap-1">
+          <div className="flex flex-wrap gap-1.5">
+            {filePaths.map(({ label, path }) => (
+              <button
+                key={path}
+                onClick={() => reveal(path)}
+                disabled={revealing === path}
+                className="flex items-center gap-1 px-2 py-1 rounded bg-surface-container-highest hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-colors text-[10px] font-medium disabled:opacity-50"
+                title={path}
+              >
+                <span className="material-symbols-outlined text-xs leading-none">folder_open</span>
+                {revealing === path ? 'Opening…' : label}
+              </button>
+            ))}
+          </div>
+          {revealError && (
+            <span className="text-[10px] text-error/80 flex items-center gap-1">
+              <span className="material-symbols-outlined text-xs leading-none">error</span>
+              {revealError}
+            </span>
+          )}
         </div>
       )}
 
