@@ -64,3 +64,9 @@ h1, h2, h3, h4, h5, h6 { font-family: 'Inter', sans-serif; }
 ::-webkit-scrollbar-track { background: #0b1326; }
 ::-webkit-scrollbar-thumb { background: #2d3449; border-radius: 10px; }
 ::-webkit-scrollbar-thumb:hover { background: #31394d; }
+
+/* ── Panel slide-in animation ───────────────────────────────────── */
+@keyframes slideInRight {
+  from { transform: translateX(100%); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}

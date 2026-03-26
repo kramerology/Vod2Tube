@@ -44,6 +44,16 @@ export interface PipelineJob {
   vodUrl: string;
   addedAtUTC: string;
   thumbnailUrl?: string;
+  // Working-copy file paths (may be empty after archiving)
+  vodFilePath: string;
+  chatTextFilePath: string;
+  chatVideoFilePath: string;
+  finalVideoFilePath: string;
+  // Archive destination paths (populated after the Archiving stage)
+  archivedVodPath: string;
+  archivedChatJsonPath: string;
+  archivedChatRenderPath: string;
+  archivedFinalVideoPath: string;
 }
 
 // ── Channel endpoints ─────────────────────────────────────────────────────────
@@ -88,6 +98,9 @@ export const vodsApi = {
 
   retry: (vodId: string) =>
     request<void>(`/vods/${encodeURIComponent(vodId)}/retry`, { method: 'POST' }),
+
+  retryFromStage: (vodId: string, stage: string) =>
+    request<void>(`/vods/${encodeURIComponent(vodId)}/retry/${encodeURIComponent(stage)}`, { method: 'POST' }),
 
   getThumbnailUrls: (vodIds: string[]) =>
     request<Record<string, string>>(`/vods/thumbnails?ids=${vodIds.map(encodeURIComponent).join(',')}`),
