@@ -24,25 +24,25 @@ namespace Vod2Tube.Application.PipelineWorkers
             _logger = logger;
         }
 
-        /// <summary>
-        /// Returns <c>true</c> when at least one archive target is enabled and
-        /// has a non-empty destination directory configured.  When <c>false</c>
-        /// there are no files to copy but we still delete the intermediates.
-        /// </summary>
-        public bool AnyArchiveConfigured()
-        {
-            var s = _options.Value;
-            return (s.ArchiveVodEnabled       && !string.IsNullOrWhiteSpace(s.ArchiveVodDir))
-                || (s.ArchiveChatJsonEnabled   && !string.IsNullOrWhiteSpace(s.ArchiveChatJsonDir))
-                || (s.ArchiveChatRenderEnabled && !string.IsNullOrWhiteSpace(s.ArchiveChatRenderDir))
-                || (s.ArchiveFinalVideoEnabled && !string.IsNullOrWhiteSpace(s.ArchiveFinalVideoDir));
-        }
+
+
+
+
+
+
+
+
+
+
+
+
 
         /// <summary>
         /// Archives enabled files and deletes all intermediate pipeline files.
         /// Yields <see cref="ProgressStatus"/> updates as each file is processed.
         /// </summary>
         public async IAsyncEnumerable<ProgressStatus> RunAsync(
+            string vodId,
             string vodId,
             string? vodFilePath,
             string? chatTextFilePath,
