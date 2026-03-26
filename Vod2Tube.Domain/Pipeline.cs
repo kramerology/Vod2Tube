@@ -27,5 +27,17 @@ namespace Vod2Tube.Domain
 
         /// <summary>Estimated minutes remaining for the current stage, or <c>null</c> when unknown.</summary>
         public double? EstimatedMinutesRemaining { get; set; }
+
+        /// <summary>Path where the VOD was archived (after the Archiving stage), or empty if not archived.</summary>
+        public string ArchivedVodPath { get; set; } = string.Empty;
+
+        /// <summary>Path where the chat JSON was archived (after the Archiving stage), or empty if not archived.</summary>
+        public string ArchivedChatJsonPath { get; set; } = string.Empty;
+
+        /// <summary>Path where the chat render was archived (after the Archiving stage), or empty if not archived.</summary>
+        public string ArchivedChatRenderPath { get; set; } = string.Empty;
+
+        /// <summary>Path where the final video was archived (after the Archiving stage), or empty if not archived.</summary>
+        public string ArchivedFinalVideoPath { get; set; } = string.Empty;
     }
 }

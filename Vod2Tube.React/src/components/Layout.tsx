@@ -82,7 +82,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               >
                 <span
                   className="material-symbols-outlined mr-3"
-                  style={({ isActive: false }) ? undefined : undefined}
                 >
                   {n.icon}
                 </span>

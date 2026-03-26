@@ -24,15 +24,45 @@ namespace Vod2Tube.Application.PipelineWorkers
             _logger = logger;
         }
 
+
+
+
+
+
+
+
+
+
         /// <summary>
-
-
-
-
-
-
-
-
+        /// Computes the expected archive destination paths for each pipeline file based on
+        /// the current archive settings.  A path is only returned when archiving is enabled
+        /// and a source file path is provided; otherwise the corresponding string is empty.
+        /// This can be called <em>after</em> <see cref="RunAsync"/> completes to obtain the
+        /// paths that were written during the archive run.
+        /// </summary>
+        public ArchiveResult ComputeArchivePaths(
+            string? vodFilePath,
+            string? chatTextFilePath,
+            string? chatVideoFilePath,
+            string? finalVideoFilePath)
+        {
+            var s = _options.Value;
+            return new ArchiveResult
+            {
+                ArchivedVodPath = s.ArchiveVodEnabled && !string.IsNullOrWhiteSpace(s.ArchiveVodDir) && !string.IsNullOrEmpty(vodFilePath)
+                    ? Path.Combine(s.ArchiveVodDir, Path.GetFileName(vodFilePath))
+                    : string.Empty,
+                ArchivedChatJsonPath = s.ArchiveChatJsonEnabled && !string.IsNullOrWhiteSpace(s.ArchiveChatJsonDir) && !string.IsNullOrEmpty(chatTextFilePath)
+                    ? Path.Combine(s.ArchiveChatJsonDir, Path.GetFileName(chatTextFilePath))
+                    : string.Empty,
+                ArchivedChatRenderPath = s.ArchiveChatRenderEnabled && !string.IsNullOrWhiteSpace(s.ArchiveChatRenderDir) && !string.IsNullOrEmpty(chatVideoFilePath)
+                    ? Path.Combine(s.ArchiveChatRenderDir, Path.GetFileName(chatVideoFilePath))
+                    : string.Empty,
+                ArchivedFinalVideoPath = s.ArchiveFinalVideoEnabled && !string.IsNullOrWhiteSpace(s.ArchiveFinalVideoDir) && !string.IsNullOrEmpty(finalVideoFilePath)
+                    ? Path.Combine(s.ArchiveFinalVideoDir, Path.GetFileName(finalVideoFilePath))
+                    : string.Empty,
+            };
+        }
 
         /// <summary>
         /// Archives enabled files and deletes all intermediate pipeline files.
@@ -173,5 +203,18 @@ namespace Vod2Tube.Application.PipelineWorkers
             if (bytes >= 1_024L)         return $"{bytes / 1_024.0:F1} KB";
             return $"{bytes} B";
         }
+    }
+
+    /// <summary>
+    /// Holds the archive destination paths produced by <see cref="Archiver"/>.
+    /// An empty string means that item was not archived (either archiving was disabled
+    /// or no source file existed).
+    /// </summary>
+    public sealed record ArchiveResult
+    {
+        public string ArchivedVodPath { get; init; } = string.Empty;
+        public string ArchivedChatJsonPath { get; init; } = string.Empty;
+        public string ArchivedChatRenderPath { get; init; } = string.Empty;
+        public string ArchivedFinalVideoPath { get; init; } = string.Empty;
     }
 }

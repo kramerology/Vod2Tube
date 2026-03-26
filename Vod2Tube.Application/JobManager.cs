@@ -520,6 +520,12 @@ namespace Vod2Tube.Application
                     if (await DetectAndApplyCancelAsync(dbContext, job, logger, ct))
                         return;
                     Console.WriteLine(); // end the in-place progress line
+                    // Persist the archive destination paths so the UI can display them.
+                    var archivePaths = archiver.ComputeArchivePaths(job.VodFilePath, job.ChatTextFilePath, job.ChatVideoFilePath, job.FinalVideoFilePath);
+                    job.ArchivedVodPath = archivePaths.ArchivedVodPath;
+                    job.ArchivedChatJsonPath = archivePaths.ArchivedChatJsonPath;
+                    job.ArchivedChatRenderPath = archivePaths.ArchivedChatRenderPath;
+                    job.ArchivedFinalVideoPath = archivePaths.ArchivedFinalVideoPath;
                     await SetStageAsync(dbContext, job, "Uploaded", ct);
                 }
 
