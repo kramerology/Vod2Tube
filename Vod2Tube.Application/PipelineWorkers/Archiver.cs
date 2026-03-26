@@ -24,15 +24,57 @@ namespace Vod2Tube.Application.PipelineWorkers
             _logger = logger;
         }
 
+
+
+
+
+
+
+
+
+
         /// <summary>
+        /// Returns the archive destination paths that were actually written to disk during
+        /// the most recent <see cref="RunAsync"/> call.  A non-empty path is returned for a
+        /// given artifact only when <em>all three</em> of the following are true:
+        /// <list type="bullet">
+        ///   <item><description>archiving is enabled for that artifact type in <see cref="AppSettings"/>,</description></item>
+        ///   <item><description>the corresponding archive directory is configured, and</description></item>
+        ///   <item><description>the destination file exists on disk (i.e. the copy succeeded).</description></item>
+        /// </list>
+        /// For any artifact that does not satisfy all three conditions the corresponding
+        /// string is empty, so callers and the UI can safely treat a non-empty value as a
+        /// confirmed, accessible archive path.
+        /// </summary>
+        public ArchiveResult ComputeArchivePaths(
+            string? vodFilePath,
+            string? chatTextFilePath,
+            string? chatVideoFilePath,
+            string? finalVideoFilePath)
+        {
+            var s = _options.Value;
+            return new ArchiveResult
+            {
+                ArchivedVodPath        = ResolveArchivedPath(s.ArchiveVodEnabled,        s.ArchiveVodDir,        vodFilePath),
+                ArchivedChatJsonPath   = ResolveArchivedPath(s.ArchiveChatJsonEnabled,   s.ArchiveChatJsonDir,   chatTextFilePath),
+                ArchivedChatRenderPath = ResolveArchivedPath(s.ArchiveChatRenderEnabled, s.ArchiveChatRenderDir, chatVideoFilePath),
+                ArchivedFinalVideoPath = ResolveArchivedPath(s.ArchiveFinalVideoEnabled, s.ArchiveFinalVideoDir, finalVideoFilePath),
+            };
+        }
 
-
-
-
-
-
-
-
+        /// <summary>
+        /// Returns the archive destination path only when archiving is enabled, a directory
+        /// is configured, a source path was set, AND the destination file actually exists on
+        /// disk.  Returning an empty string for any other case prevents the UI from
+        /// displaying a file-explorer button for a file that was never archived.
+        /// </summary>
+        private static string ResolveArchivedPath(bool enabled, string? archiveDir, string? sourceFilePath)
+        {
+            if (!enabled || string.IsNullOrWhiteSpace(archiveDir) || string.IsNullOrEmpty(sourceFilePath))
+                return string.Empty;
+            var dest = Path.Combine(archiveDir, Path.GetFileName(sourceFilePath));
+            return File.Exists(dest) ? dest : string.Empty;
+        }
 
         /// <summary>
         /// Archives enabled files and deletes all intermediate pipeline files.
@@ -173,5 +215,18 @@ namespace Vod2Tube.Application.PipelineWorkers
             if (bytes >= 1_024L)         return $"{bytes / 1_024.0:F1} KB";
             return $"{bytes} B";
         }
+    }
+
+    /// <summary>
+    /// Holds the archive destination paths produced by <see cref="Archiver"/>.
+    /// An empty string means that item was not archived (either archiving was disabled
+    /// or no source file existed).
+    /// </summary>
+    public sealed record ArchiveResult
+    {
+        public string ArchivedVodPath { get; init; } = string.Empty;
+        public string ArchivedChatJsonPath { get; init; } = string.Empty;
+        public string ArchivedChatRenderPath { get; init; } = string.Empty;
+        public string ArchivedFinalVideoPath { get; init; } = string.Empty;
     }
 }

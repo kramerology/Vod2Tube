@@ -24,5 +24,17 @@ namespace Vod2Tube.Application.Models
         public TimeSpan Duration { get; set; }
         public string VodUrl { get; set; } = string.Empty;
         public DateTime AddedAtUTC { get; set; }
+
+        // Working-copy file paths (may be empty after archiving)
+        public string VodFilePath { get; set; } = string.Empty;
+        public string ChatTextFilePath { get; set; } = string.Empty;
+        public string ChatVideoFilePath { get; set; } = string.Empty;
+        public string FinalVideoFilePath { get; set; } = string.Empty;
+
+        // Archive destination paths (populated after the Archiving stage)
+        public string ArchivedVodPath { get; set; } = string.Empty;
+        public string ArchivedChatJsonPath { get; set; } = string.Empty;
+        public string ArchivedChatRenderPath { get; set; } = string.Empty;
+        public string ArchivedFinalVideoPath { get; set; } = string.Empty;
     }
 }

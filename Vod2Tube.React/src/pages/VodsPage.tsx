@@ -5,6 +5,7 @@ import {
   isActive, isPending, isCompleted, isFailed,
   formatDuration, stageLabel, formatEta,
 } from '../api/client';
+import VodDetailPanel from '../components/VodDetailPanel';
 
 // ── Status helpers ────────────────────────────────────────────────────────────
 
@@ -29,7 +30,7 @@ function statusColor(job: PipelineJob): string {
 function QueueRow({
   job,
   thumbnailUrl,
-  onPause, onResume, onCancel, onRetry,
+  onPause, onResume, onCancel, onRetry, onClick,
 }: {
   job: PipelineJob;
   thumbnailUrl?: string;
@@ -37,6 +38,7 @@ function QueueRow({
   onResume: () => void;
   onCancel: () => void;
   onRetry: () => void;
+  onClick: () => void;
 }) {
   const done = isCompleted(job);
   const failed = isFailed(job);
@@ -44,7 +46,13 @@ function QueueRow({
   const pending = isPending(job);
 
   return (
-    <div className={`grid grid-cols-12 gap-4 px-6 py-5 hover:bg-white/[0.02] transition-colors items-center ${failed ? 'bg-error-container/5' : ''}`}>
+    <div
+      role="button"
+      tabIndex={0}
+      className={`grid grid-cols-12 gap-4 px-6 py-5 hover:bg-white/[0.04] transition-colors items-center cursor-pointer ${failed ? 'bg-error-container/5' : ''}`}
+      onClick={onClick}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } }}
+    >
       {/* Media Asset & ID — col-span-5 */}
       <div className="col-span-5 flex gap-4">
         <div className="h-12 w-20 bg-surface-container-highest rounded-lg overflow-hidden flex-shrink-0 relative">
@@ -125,7 +133,7 @@ function QueueRow({
       </div>
 
       {/* Actions — col-span-2 */}
-      <div className="col-span-2 flex justify-end gap-2">
+      <div className="col-span-2 flex justify-end gap-2" onClick={e => e.stopPropagation()}>
         {done && (
           <>
             {job.youtubeVideoId && (
@@ -184,6 +192,7 @@ export default function VodsPage() {
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>('all');
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [selectedVodId, setSelectedVodId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -318,6 +327,7 @@ export default function VodsPage() {
                 onResume={() => act(() => vodsApi.resume(job.vodId))}
                 onCancel={() => act(() => vodsApi.cancel(job.vodId))}
                 onRetry={() => act(() => vodsApi.retry(job.vodId))}
+                onClick={() => setSelectedVodId(job.vodId)}
               />
             ))}
           </div>
@@ -389,6 +399,20 @@ export default function VodsPage() {
           </div>
         </div>
       )}
+
+      {/* VOD Detail Panel */}
+      {selectedVodId && (() => {
+        const selectedJob = jobs.find(j => j.vodId === selectedVodId);
+        if (!selectedJob) return null;
+        return (
+          <VodDetailPanel
+            job={selectedJob}
+            thumbnailUrl={thumbnailUrls[selectedVodId]}
+            onClose={() => setSelectedVodId(null)}
+            onJobChanged={() => { load(); }}
+          />
+        );
+      })()}
     </>
   );
 }

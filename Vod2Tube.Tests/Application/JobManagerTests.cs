@@ -386,7 +386,9 @@ public class JobManagerTests
         {
             await JobManager.ProcessJobToCompletionAsync(job, ctx, CreateWorkerProvider(videoUploader: new StubVideoUploader()), NullLogger.Instance, CancellationToken.None);
 
-            await Assert.That(job.VodFilePath).IsEqualTo(vodOutputPath);
+            // After archiving the Archiver deletes all working copies, so the working-copy
+            // paths should be empty once the job reaches "Uploaded".
+            await Assert.That(job.VodFilePath).IsEqualTo("");
             await Assert.That(job.Stage).IsEqualTo("Uploaded");
         }
         finally
@@ -438,7 +440,9 @@ public class JobManagerTests
         {
             await JobManager.ProcessJobToCompletionAsync(job, ctx, CreateWorkerProvider(videoUploader: new StubVideoUploader()), NullLogger.Instance, CancellationToken.None);
 
-            await Assert.That(job.ChatTextFilePath).IsEqualTo(chatOutputPath);
+            // After archiving the Archiver deletes all working copies, so the working-copy
+            // paths should be empty once the job reaches "Uploaded".
+            await Assert.That(job.ChatTextFilePath).IsEqualTo("");
             await Assert.That(job.Stage).IsEqualTo("Uploaded");
         }
         finally

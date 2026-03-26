@@ -103,6 +103,9 @@ vods.MapPost("/{vodId}/cancel", async (string vodId, PipelineService svc) =>
 vods.MapPost("/{vodId}/retry", async (string vodId, PipelineService svc) =>
     await svc.RetryJobAsync(vodId) ? Results.Ok() : Results.NotFound());
 
+vods.MapPost("/{vodId}/retry/{stage}", async (string vodId, string stage, PipelineService svc) =>
+    await svc.RetryFromStageAsync(vodId, stage) ? Results.Ok() : Results.NotFound());
+
 vods.MapGet("/thumbnails", async (string ids, TwitchGraphQLService twitchSvc) =>
 {
     var vodIds = ids.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
@@ -179,4 +182,66 @@ app.MapGet("/api/filesystem/browse", (string? path, HttpContext ctx) =>
     }
 });
 
+// Reveal a file or folder in the OS file manager (loopback only).
+app.MapPost("/api/filesystem/reveal", (RevealRequest req, HttpContext ctx) =>
+{
+    if (ctx.Connection.RemoteIpAddress is not { } remoteIp || !System.Net.IPAddress.IsLoopback(remoteIp))
+        return Results.Json(new { error = "This endpoint is only accessible from localhost" }, statusCode: 403);
+
+    if (string.IsNullOrWhiteSpace(req.Path))
+        return Results.BadRequest(new { error = "Path is required" });
+
+    try
+    {
+        string fullPath = Path.GetFullPath(req.Path);
+        System.Diagnostics.ProcessStartInfo psi;
+
+        if (OperatingSystem.IsWindows())
+        {
+            if (!File.Exists(fullPath) && !Directory.Exists(fullPath))
+                return Results.NotFound(new { error = "Path does not exist" });
+
+            // Explorer uses its own argument parser, not a shell — the /select, syntax
+            // is well-defined and Windows paths cannot contain the '"' character, so
+            // this is safe.  UseShellExecute=false prevents shell expansion entirely.
+            psi = new System.Diagnostics.ProcessStartInfo("explorer.exe")
+            {
+                UseShellExecute = false,
+                Arguments = File.Exists(fullPath) ? $"/select,\"{fullPath}\"" : $"\"{fullPath}\"",
+            };
+        }
+        else if (OperatingSystem.IsMacOS())
+        {
+            if (!File.Exists(fullPath) && !Directory.Exists(fullPath))
+                return Results.NotFound(new { error = "Path does not exist" });
+
+            // Use ArgumentList so the path is passed verbatim without shell interpretation.
+            psi = new System.Diagnostics.ProcessStartInfo("open") { UseShellExecute = false };
+            if (File.Exists(fullPath))
+                psi.ArgumentList.Add("-R");
+            psi.ArgumentList.Add(fullPath);
+        }
+        else
+        {
+            // Linux — open the containing directory
+            string folder = File.Exists(fullPath) ? (Path.GetDirectoryName(fullPath) ?? fullPath) : fullPath;
+            if (!Directory.Exists(folder))
+                return Results.NotFound(new { error = "Path does not exist" });
+
+            // Use ArgumentList so the path is passed verbatim without shell interpretation.
+            psi = new System.Diagnostics.ProcessStartInfo("xdg-open") { UseShellExecute = false };
+            psi.ArgumentList.Add(folder);
+        }
+
+        System.Diagnostics.Process.Start(psi);
+        return Results.Ok();
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
 app.Run();
+
+record RevealRequest(string Path);

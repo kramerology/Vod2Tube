@@ -181,8 +181,112 @@ namespace Vod2Tube.Application.Services
                 CreatedAtUTC = vod?.CreatedAtUTC ?? DateTime.MinValue,
                 Duration = vod?.Duration ?? TimeSpan.Zero,
                 VodUrl = vod?.Url ?? string.Empty,
-                AddedAtUTC = vod?.AddedAtUTC ?? DateTime.MinValue
+                AddedAtUTC = vod?.AddedAtUTC ?? DateTime.MinValue,
+                VodFilePath = pipeline.VodFilePath,
+                ChatTextFilePath = pipeline.ChatTextFilePath,
+                ChatVideoFilePath = pipeline.ChatVideoFilePath,
+                FinalVideoFilePath = pipeline.FinalVideoFilePath,
+                ArchivedVodPath = pipeline.ArchivedVodPath,
+                ArchivedChatJsonPath = pipeline.ArchivedChatJsonPath,
+                ArchivedChatRenderPath = pipeline.ArchivedChatRenderPath,
+                ArchivedFinalVideoPath = pipeline.ArchivedFinalVideoPath,
             };
+        }
+
+        /// <summary>
+        /// Well-known stage-key constants accepted by <see cref="RetryFromStageAsync"/>.
+        /// These must stay in sync with the values used by the React frontend.
+        /// </summary>
+        internal static class RetryStageKeys
+        {
+            internal const string DownloadVod  = "downloadvod";
+            internal const string DownloadChat = "downloadchat";
+            internal const string RenderChat   = "renderchat";
+            internal const string Combine      = "combine";
+            internal const string Archive      = "archive";
+        }
+
+        /// <summary>
+        /// Resets the pipeline job back to a specific processing stage, clearing all file
+        /// paths and state from subsequent stages.
+        /// </summary>
+        /// <param name="vodId">The VOD identifier.</param>
+        /// <param name="stage">
+        /// The stage key to retry from: <c>downloadVod</c>, <c>downloadChat</c>,
+        /// <c>renderChat</c>, <c>combine</c>, or <c>archive</c>.
+        /// </param>
+        public async Task<bool> RetryFromStageAsync(string vodId, string stage)
+        {
+            var job = await _dbContext.Pipelines.FindAsync(vodId);
+            if (job == null)
+            {
+                _logger.LogWarning("RetryFromStage requested for unknown VOD {VodId}", vodId);
+                return false;
+            }
+
+            job.Failed = false;
+            job.FailCount = 0;
+            job.FailReason = string.Empty;
+            job.Description = string.Empty;
+            job.Paused = false;
+
+            switch (stage.ToLowerInvariant())
+            {
+                case RetryStageKeys.DownloadVod:
+                    job.Stage = "Pending";
+                    job.VodFilePath = string.Empty;
+                    job.ChatTextFilePath = string.Empty;
+                    job.ChatVideoFilePath = string.Empty;
+                    job.FinalVideoFilePath = string.Empty;
+                    job.YoutubeVideoId = string.Empty;
+                    job.ResumableUploadUri = string.Empty;
+                    job.ArchivedVodPath = string.Empty;
+                    job.ArchivedChatJsonPath = string.Empty;
+                    job.ArchivedChatRenderPath = string.Empty;
+                    job.ArchivedFinalVideoPath = string.Empty;
+                    break;
+                case RetryStageKeys.DownloadChat:
+                    job.Stage = "PendingDownloadChat";
+                    job.ChatTextFilePath = string.Empty;
+                    job.ChatVideoFilePath = string.Empty;
+                    job.FinalVideoFilePath = string.Empty;
+                    job.YoutubeVideoId = string.Empty;
+                    job.ResumableUploadUri = string.Empty;
+                    job.ArchivedChatJsonPath = string.Empty;
+                    job.ArchivedChatRenderPath = string.Empty;
+                    job.ArchivedFinalVideoPath = string.Empty;
+                    break;
+                case RetryStageKeys.RenderChat:
+                    job.Stage = "PendingRenderingChat";
+                    job.ChatVideoFilePath = string.Empty;
+                    job.FinalVideoFilePath = string.Empty;
+                    job.YoutubeVideoId = string.Empty;
+                    job.ResumableUploadUri = string.Empty;
+                    job.ArchivedChatRenderPath = string.Empty;
+                    job.ArchivedFinalVideoPath = string.Empty;
+                    break;
+                case RetryStageKeys.Combine:
+                    job.Stage = "PendingCombining";
+                    job.FinalVideoFilePath = string.Empty;
+                    job.YoutubeVideoId = string.Empty;
+                    job.ResumableUploadUri = string.Empty;
+                    job.ArchivedFinalVideoPath = string.Empty;
+                    break;
+                case RetryStageKeys.Archive:
+                    job.Stage = "PendingArchiving";
+                    job.ArchivedVodPath = string.Empty;
+                    job.ArchivedChatJsonPath = string.Empty;
+                    job.ArchivedChatRenderPath = string.Empty;
+                    job.ArchivedFinalVideoPath = string.Empty;
+                    break;
+                default:
+                    _logger.LogWarning("RetryFromStage: unknown stage key '{Stage}' for VOD {VodId}", stage, vodId);
+                    return false;
+            }
+
+            await _dbContext.SaveChangesAsync();
+            _logger.LogInformation("RetryFromStage: VOD {VodId} reset to stage '{Stage}' (key: {Key})", vodId, job.Stage, stage);
+            return true;
         }
     }
 }
