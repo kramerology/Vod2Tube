@@ -526,6 +526,12 @@ namespace Vod2Tube.Application
                     job.ArchivedChatJsonPath = archivePaths.ArchivedChatJsonPath;
                     job.ArchivedChatRenderPath = archivePaths.ArchivedChatRenderPath;
                     job.ArchivedFinalVideoPath = archivePaths.ArchivedFinalVideoPath;
+                    // The Archiver deletes every working-copy file (whether or not it was
+                    // archived).  Clear the paths so the UI knows the files are gone.
+                    job.VodFilePath = string.Empty;
+                    job.ChatTextFilePath = string.Empty;
+                    job.ChatVideoFilePath = string.Empty;
+                    job.FinalVideoFilePath = string.Empty;
                     await SetStageAsync(dbContext, job, "Uploaded", ct);
                 }
 
