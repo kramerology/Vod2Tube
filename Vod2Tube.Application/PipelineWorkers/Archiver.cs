@@ -24,10 +24,7 @@ namespace Vod2Tube.Application.PipelineWorkers
             _logger = logger;
         }
 
-
-
-
-
+        /// <summary>
 
 
 
@@ -42,7 +39,6 @@ namespace Vod2Tube.Application.PipelineWorkers
         /// Yields <see cref="ProgressStatus"/> updates as each file is processed.
         /// </summary>
         public async IAsyncEnumerable<ProgressStatus> RunAsync(
-            string vodId,
             string vodId,
             string? vodFilePath,
             string? chatTextFilePath,
@@ -101,6 +97,9 @@ namespace Vod2Tube.Application.PipelineWorkers
                     // Ensure the destination directory exists.
                     Directory.CreateDirectory(archiveDir);
                     string dest = Path.Combine(archiveDir, Path.GetFileName(source));
+                    // Write to a temp file so that a crash/cancellation mid-copy never
+                    // leaves a partially-written file at the final destination path.
+                    string tmp = dest + ".tmp";
 
                     _logger.LogInformation("Archiving {Label} for job {VodId}: {Source} → {Dest}",
                         label, vodId, source, dest);
@@ -108,35 +107,42 @@ namespace Vod2Tube.Application.PipelineWorkers
                     long fileSize = new FileInfo(source).Length;
                     long fileBytesWritten = 0;
 
-                    await using var srcStream = new FileStream(
-                        source, FileMode.Open, FileAccess.Read, FileShare.Read, CopyBufferSize, useAsync: true);
-                    await using var dstStream = new FileStream(
-                        dest, FileMode.Create, FileAccess.Write, FileShare.None, CopyBufferSize, useAsync: true);
-
-                    var buffer = new byte[CopyBufferSize];
-                    int bytesRead;
-                    while ((bytesRead = await srcStream.ReadAsync(buffer, ct)) > 0)
+                    // Explicit scope block so the streams are flushed and closed
+                    // before the atomic rename below.
                     {
-                        await dstStream.WriteAsync(buffer.AsMemory(0, bytesRead), ct);
-                        fileBytesWritten += bytesRead;
+                        await using var srcStream = new FileStream(
+                            source, FileMode.Open, FileAccess.Read, FileShare.Read, CopyBufferSize, useAsync: true);
+                        await using var dstStream = new FileStream(
+                            tmp, FileMode.Create, FileAccess.Write, FileShare.None, CopyBufferSize, useAsync: true);
 
-                        long totalDone = archivedBytes + fileBytesWritten;
-                        double pct = totalArchiveBytes > 0 ? (double)totalDone / totalArchiveBytes * 100.0 : 0;
-
-                        double? etaMinutes = null;
-                        double elapsed = (DateTime.UtcNow - startTime).TotalSeconds;
-                        if (elapsed > 1 && totalDone > 0 && totalArchiveBytes > totalDone)
+                        var buffer = new byte[CopyBufferSize];
+                        int bytesRead;
+                        while ((bytesRead = await srcStream.ReadAsync(buffer, ct)) > 0)
                         {
-                            double bytesPerSec = totalDone / elapsed;
-                            etaMinutes = (totalArchiveBytes - totalDone) / bytesPerSec / 60.0;
+                            await dstStream.WriteAsync(buffer.AsMemory(0, bytesRead), ct);
+                            fileBytesWritten += bytesRead;
+
+                            long totalDone = archivedBytes + fileBytesWritten;
+                            double pct = totalArchiveBytes > 0 ? (double)totalDone / totalArchiveBytes * 100.0 : 0;
+
+                            double? etaMinutes = null;
+                            double elapsed = (DateTime.UtcNow - startTime).TotalSeconds;
+                            if (elapsed > 1 && totalDone > 0 && totalArchiveBytes > totalDone)
+                            {
+                                double bytesPerSec = totalDone / elapsed;
+                                etaMinutes = (totalArchiveBytes - totalDone) / bytesPerSec / 60.0;
+                            }
+
+                            yield return ProgressStatus.WithProgress(
+                                $"Archiving {label}: {FormatBytes(fileBytesWritten)} / {FormatBytes(fileSize)}",
+                                pct,
+                                etaMinutes);
                         }
+                    } // srcStream and dstStream are flushed and closed here
 
-                        yield return ProgressStatus.WithProgress(
-                            $"Archiving {label}: {FormatBytes(fileBytesWritten)} / {FormatBytes(fileSize)}",
-                            pct,
-                            etaMinutes);
-                    }
-
+                    // Atomically promote the temp file to the final destination,
+                    // overwriting any pre-existing file at that path.
+                    File.Move(tmp, dest, overwrite: true);
                     archivedBytes += fileSize;
                     _logger.LogInformation("Archived {Label} for job {VodId} to {Dest}", label, vodId, dest);
                 }
