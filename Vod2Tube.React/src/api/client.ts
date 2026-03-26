@@ -167,12 +167,6 @@ export const filesystemApi = {
     request<BrowseResult>(
       `/filesystem/browse${path ? `?path=${encodeURIComponent(path)}` : ''}`
     ),
-
-  reveal: (path: string) =>
-    request<void>('/filesystem/reveal', {
-      method: 'POST',
-      body: JSON.stringify({ path }),
-    }),
 };
 
 // ── Stage helpers ─────────────────────────────────────────────────────────────
