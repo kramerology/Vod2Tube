@@ -1,7 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import {
   vodsApi,
-  filesystemApi,
   type PipelineJob,
   isActive, isPending, isCompleted, isFailed,
   formatDuration,
@@ -70,46 +69,6 @@ function getStepStatus(step: PipelineStep, job: PipelineJob): StepStatus {
   return 'pending';
 }
 
-// Which file path(s) are relevant for each step (for "open in file explorer")
-function getStepFilePaths(step: PipelineStep, job: PipelineJob): { label: string; path: string }[] {
-  switch (step.key) {
-    case 'downloadVod':
-      return job.vodFilePath
-        ? [{ label: 'VOD file', path: job.vodFilePath }]
-        : job.archivedVodPath
-          ? [{ label: 'Archived VOD', path: job.archivedVodPath }]
-          : [];
-    case 'downloadChat':
-      return job.chatTextFilePath
-        ? [{ label: 'Chat JSON', path: job.chatTextFilePath }]
-        : job.archivedChatJsonPath
-          ? [{ label: 'Archived Chat JSON', path: job.archivedChatJsonPath }]
-          : [];
-    case 'renderChat':
-      return job.chatVideoFilePath
-        ? [{ label: 'Chat render', path: job.chatVideoFilePath }]
-        : job.archivedChatRenderPath
-          ? [{ label: 'Archived Chat render', path: job.archivedChatRenderPath }]
-          : [];
-    case 'combine':
-      return job.finalVideoFilePath
-        ? [{ label: 'Final video', path: job.finalVideoFilePath }]
-        : job.archivedFinalVideoPath
-          ? [{ label: 'Archived final video', path: job.archivedFinalVideoPath }]
-          : [];
-    case 'archive': {
-      const paths: { label: string; path: string }[] = [];
-      if (job.archivedVodPath)        paths.push({ label: 'Archived VOD',        path: job.archivedVodPath });
-      if (job.archivedChatJsonPath)   paths.push({ label: 'Archived Chat JSON',   path: job.archivedChatJsonPath });
-      if (job.archivedChatRenderPath) paths.push({ label: 'Archived Chat render', path: job.archivedChatRenderPath });
-      if (job.archivedFinalVideoPath) paths.push({ label: 'Archived final video', path: job.archivedFinalVideoPath });
-      return paths;
-    }
-    default:
-      return [];
-  }
-}
-
 // ── Step Card ─────────────────────────────────────────────────────────────────
 
 function StepCard({
@@ -122,23 +81,6 @@ function StepCard({
   onRetryFromStage: (stageKey: string) => void;
 }) {
   const status = getStepStatus(step, job);
-  const filePaths = getStepFilePaths(step, job);
-  const [revealing, setRevealing] = useState<string | null>(null);
-  const [revealError, setRevealError] = useState<string | null>(null);
-
-  async function reveal(path: string) {
-    setRevealing(path);
-    setRevealError(null);
-    try {
-      await filesystemApi.reveal(path);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      const isNotFound = msg.includes('404') || msg.toLowerCase().includes('not found');
-      setRevealError(isNotFound ? 'File not found on disk' : 'Could not open file explorer');
-    } finally {
-      setRevealing(null);
-    }
-  }
 
   const statusConfig = {
     completed: {
@@ -197,32 +139,6 @@ function StepCard({
       {status === 'error' && job.failReason && (
         <div className="mt-2 px-2 py-1.5 bg-error/10 rounded text-[10px] text-error/80 leading-snug">
           {job.failReason}
-        </div>
-      )}
-
-      {/* File path buttons */}
-      {filePaths.length > 0 && (
-        <div className="mt-2 flex flex-col gap-1">
-          <div className="flex flex-wrap gap-1.5">
-            {filePaths.map(({ label, path }) => (
-              <button
-                key={path}
-                onClick={() => reveal(path)}
-                disabled={revealing === path}
-                className="flex items-center gap-1 px-2 py-1 rounded bg-surface-container-highest hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface transition-colors text-[10px] font-medium disabled:opacity-50"
-                title={path}
-              >
-                <span className="material-symbols-outlined text-xs leading-none">folder_open</span>
-                {revealing === path ? 'Opening…' : label}
-              </button>
-            ))}
-          </div>
-          {revealError && (
-            <span className="text-[10px] text-error/80 flex items-center gap-1">
-              <span className="material-symbols-outlined text-xs leading-none">error</span>
-              {revealError}
-            </span>
-          )}
         </div>
       )}
 
