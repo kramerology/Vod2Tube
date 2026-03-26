@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
@@ -489,8 +489,8 @@ namespace Vod2Tube.Application
             string arguments = $"--continue --part --retries 10 --fragment-retries infinite " +
                                $"--concurrent-fragments 4 --newline --progress " +
                                $"--merge-output-format mp4 " +
-                               $"--paths temp:\"{tempDir.FullName}\" " +
-                               $"-o \"{finalFile.FullName}\" \"{url}\"";
+                               $"--paths temp:\"{tempDir.FullName.Replace('\\', '/')}\" " +
+                               $"-o \"{finalFile.FullName.Replace('\\', '/')}\" \"{url}\"";
 
             var psi = new ProcessStartInfo
             {
@@ -962,7 +962,7 @@ namespace Vod2Tube.Application
 
         public async IAsyncEnumerable<ProgressStatus> DownloadChatNewAsync(string vodId, DirectoryInfo tempDir, FileInfo finalFile, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
-            string arguments = $"chatdownload --id \"{vodId}\" --temp-path \"{tempDir.FullName}\" -o \"{finalFile.FullName}\" --collision overwrite";
+            string arguments = $"chatdownload --id \"{vodId}\" --temp-path \"{tempDir.FullName.Replace('\\', '/')}\" -o \"{finalFile.FullName.Replace('\\', '/')}\" --collision overwrite";
 
 
             var psi = new ProcessStartInfo
