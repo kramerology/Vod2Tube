@@ -109,6 +109,15 @@ export interface AppSettings {
   chatWidth: number;
   chatFontSize: number;
   chatUpdateRate: number;
+
+  archiveVodEnabled: boolean;
+  archiveVodDir: string;
+  archiveChatJsonEnabled: boolean;
+  archiveChatJsonDir: string;
+  archiveChatRenderEnabled: boolean;
+  archiveChatRenderDir: string;
+  archiveFinalVideoEnabled: boolean;
+  archiveFinalVideoDir: string;
 }
 
 export const settingsApi = {
@@ -150,10 +159,10 @@ export const filesystemApi = {
 // ── Stage helpers ─────────────────────────────────────────────────────────────
 
 const ACTIVE_STAGES = new Set([
-  'DownloadingVod', 'DownloadingChat', 'RenderingChat', 'Combining', 'Uploading',
+  'DownloadingVod', 'DownloadingChat', 'RenderingChat', 'Combining', 'Uploading', 'Archiving',
 ]);
 const PENDING_STAGES = new Set([
-  'Pending', 'PendingDownloadChat', 'PendingRenderingChat', 'PendingCombining', 'PendingUpload',
+  'Pending', 'PendingDownloadChat', 'PendingRenderingChat', 'PendingCombining', 'PendingUpload', 'PendingArchiving',
 ]);
 const COMPLETED_STAGES = new Set(['Uploaded', 'Cancelled']);
 
