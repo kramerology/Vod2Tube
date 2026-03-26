@@ -47,8 +47,11 @@ function QueueRow({
 
   return (
     <div
+      role="button"
+      tabIndex={0}
       className={`grid grid-cols-12 gap-4 px-6 py-5 hover:bg-white/[0.04] transition-colors items-center cursor-pointer ${failed ? 'bg-error-container/5' : ''}`}
       onClick={onClick}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } }}
     >
       {/* Media Asset & ID — col-span-5 */}
       <div className="col-span-5 flex gap-4">

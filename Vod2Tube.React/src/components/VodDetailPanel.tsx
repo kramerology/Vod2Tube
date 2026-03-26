@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import {
   vodsApi,
   type PipelineJob,
@@ -173,14 +173,20 @@ export default function VodDetailPanel({
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
 
-  // Close on backdrop click
+  // Focus the panel on mount so keyboard and screen-reader users land inside it.
   useEffect(() => {
-    function handleKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose();
-    }
-    document.addEventListener('keydown', handleKey);
-    return () => document.removeEventListener('keydown', handleKey);
-  }, [onClose]);
+    panelRef.current?.focus();
+  }, []);
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        onClose();
+      }
+    },
+    [onClose],
+  );
 
   async function handleRetryFromStage(stageKey: string) {
     try {
@@ -231,7 +237,12 @@ export default function VodDetailPanel({
       {/* Panel */}
       <div
         ref={panelRef}
-        className="relative z-10 flex flex-col w-full max-w-lg bg-surface-container-low border-l border-white/5 shadow-2xl overflow-y-auto"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="vod-detail-title"
+        tabIndex={-1}
+        onKeyDown={handleKeyDown}
+        className="relative z-10 flex flex-col w-full max-w-lg bg-surface-container-low border-l border-white/5 shadow-2xl overflow-y-auto focus:outline-none"
         style={{ animation: 'slideInRight 0.2s ease-out' }}
       >
         {/* Header */}
@@ -242,7 +253,7 @@ export default function VodDetailPanel({
             </div>
           )}
           <div className="flex-1 min-w-0">
-            <h2 className="text-sm font-bold text-on-surface truncate leading-snug">{job.title || job.vodId}</h2>
+            <h2 id="vod-detail-title" className="text-sm font-bold text-on-surface truncate leading-snug">{job.title || job.vodId}</h2>
             <div className="flex items-center gap-2 mt-0.5">
               <span className={`text-[10px] font-bold uppercase ${overallStatusColor()}`}>{overallStatusLabel()}</span>
               {job.channelName && (
