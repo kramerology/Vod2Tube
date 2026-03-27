@@ -288,6 +288,10 @@ namespace Vod2Tube.Application
                         if (!File.Exists(vodOutput))
                             throw new InvalidOperationException($"VOD download completed but output file not found: {vodOutput}");
                         job.VodFilePath = vodOutput;
+                        job.Description = "VOD download complete";
+                        job.PercentComplete = 100;
+                        job.EstimatedMinutesRemaining = null;
+                        await dbContext.SaveChangesAsync(ct);
                         await SetStageAsync(dbContext, job, "PendingDownloadChat", ct);
                     }
                 }
@@ -331,6 +335,9 @@ namespace Vod2Tube.Application
                         job.ChatTextFilePath = chatDownloader.GetOutputPath(job.VodId);
                         if (!File.Exists(job.ChatTextFilePath))
                             throw new InvalidOperationException($"Chat download completed but output file not found: {job.ChatTextFilePath}");
+                        job.Description = "Chat download complete";
+                        job.PercentComplete = 100;
+                        job.EstimatedMinutesRemaining = null;
                         await dbContext.SaveChangesAsync(ct);
                         await SetStageAsync(dbContext, job, "PendingRenderingChat", ct);
                     }
@@ -389,6 +396,9 @@ namespace Vod2Tube.Application
                         job.ChatVideoFilePath = chatRenderer.GetOutputPath(job.VodId);
                         if (!File.Exists(job.ChatVideoFilePath))
                             throw new InvalidOperationException($"Chat render completed but output file not found: {job.ChatVideoFilePath}");
+                        job.Description = "Chat render complete";
+                        job.PercentComplete = 100;
+                        job.EstimatedMinutesRemaining = null;
                         await dbContext.SaveChangesAsync(ct);
                         await SetStageAsync(dbContext, job, "PendingCombining", ct);
                     }
@@ -447,6 +457,9 @@ namespace Vod2Tube.Application
                         job.FinalVideoFilePath = finalRenderer.GetOutputPath(job.VodId);
                         if (!File.Exists(job.FinalVideoFilePath))
                             throw new InvalidOperationException($"Video combine completed but output file not found: {job.FinalVideoFilePath}");
+                        job.Description = "Video combining complete";
+                        job.PercentComplete = 100;
+                        job.EstimatedMinutesRemaining = null;
                         await dbContext.SaveChangesAsync(ct);
                         await SetStageAsync(dbContext, job, "PendingUpload", ct);
                     }
@@ -485,6 +498,10 @@ namespace Vod2Tube.Application
                     if (await DetectAndApplyCancelAsync(dbContext, job, logger, ct))
                         return;
                     Console.WriteLine(); // end the in-place progress line
+                    job.Description = "Upload complete";
+                    job.PercentComplete = 100;
+                    job.EstimatedMinutesRemaining = null;
+                    await dbContext.SaveChangesAsync(ct);
                     await SetStageAsync(dbContext, job, "PendingArchiving", ct);
                 }
 
@@ -520,6 +537,9 @@ namespace Vod2Tube.Application
                     if (await DetectAndApplyCancelAsync(dbContext, job, logger, ct))
                         return;
                     Console.WriteLine(); // end the in-place progress line
+                    job.Description = "Completed";
+                    job.PercentComplete = 100;
+                    job.EstimatedMinutesRemaining = null;
                     // Persist the archive destination paths so the UI can display them.
                     var archivePaths = archiver.ComputeArchivePaths(job.VodFilePath, job.ChatTextFilePath, job.ChatVideoFilePath, job.FinalVideoFilePath);
                     job.ArchivedVodPath = archivePaths.ArchivedVodPath;
@@ -532,6 +552,7 @@ namespace Vod2Tube.Application
                     job.ChatTextFilePath = string.Empty;
                     job.ChatVideoFilePath = string.Empty;
                     job.FinalVideoFilePath = string.Empty;
+                    await dbContext.SaveChangesAsync(ct);
                     await SetStageAsync(dbContext, job, "Uploaded", ct);
                 }
 
