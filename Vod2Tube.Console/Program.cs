@@ -47,6 +47,7 @@ try
             services.AddScoped<Archiver>();
             services.AddScoped<TwitchGraphQLService>();
             services.AddScoped<TwitchDownloadService>();
+            services.AddScoped<YouTubeAccountService>();
 
             // Settings
             services.AddOptions<AppSettings>();

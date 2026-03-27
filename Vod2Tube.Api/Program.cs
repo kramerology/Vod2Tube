@@ -25,6 +25,7 @@ builder.Services.AddSingleton<IConfigureOptions<AppSettings>, AppSettingsConfigu
 builder.Services.AddScoped<SettingsService>();
 
 builder.Services.AddScoped<ChannelService>();
+builder.Services.AddScoped<YouTubeAccountService>();
 builder.Services.AddScoped<PipelineService>();
 builder.Services.AddScoped<TwitchGraphQLService>();
 builder.Services.AddScoped<TwitchDownloadService>();
@@ -125,6 +126,138 @@ settings.MapPut("/", async (AppSettings incoming, SettingsService svc) =>
     await svc.SaveSettingsAsync(incoming);
     return Results.Ok(await svc.GetSettingsAsync());
 });
+
+// ── YouTube Accounts ──────────────────────────────────────────────────────────
+
+var accounts = app.MapGroup("/api/accounts");
+
+accounts.MapGet("/", async (YouTubeAccountService svc) =>
+{
+    var all = await svc.GetAllAsync();
+    var result = all.Select(a => new
+    {
+        a.Id,
+        a.Name,
+        a.AddedAtUTC,
+        a.ChannelTitle,
+        IsAuthorized = svc.IsAuthorized(a.Id),
+    });
+    return Results.Ok(result);
+});
+
+accounts.MapGet("/{id:int}", async (int id, YouTubeAccountService svc) =>
+{
+    var account = await svc.GetByIdAsync(id);
+    if (account == null) return Results.NotFound();
+    return Results.Ok(new
+    {
+        account.Id,
+        account.Name,
+        account.AddedAtUTC,
+        account.ChannelTitle,
+        IsAuthorized = svc.IsAuthorized(account.Id),
+    });
+});
+
+accounts.MapPost("/", async (CreateAccountRequest req, YouTubeAccountService svc) =>
+{
+    try
+    {
+        var account = await svc.CreateAsync(req.Name, req.ClientSecretsJson);
+        return Results.Created($"/api/accounts/{account.Id}", new
+        {
+            account.Id,
+            account.Name,
+            account.AddedAtUTC,
+            account.ChannelTitle,
+            IsAuthorized = false,
+        });
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+accounts.MapPut("/{id:int}", async (int id, UpdateAccountRequest req, YouTubeAccountService svc) =>
+    await svc.UpdateAsync(id, req.Name) ? Results.Ok() : Results.NotFound());
+
+accounts.MapDelete("/{id:int}", async (int id, YouTubeAccountService svc) =>
+    await svc.DeleteAsync(id) ? Results.NoContent() : Results.NotFound());
+
+accounts.MapPost("/{id:int}/authorize", async (int id, YouTubeAccountService svc, HttpContext ctx) =>
+{
+    var scheme = ctx.Request.Scheme;
+    var host = ctx.Request.Host;
+    var redirectUri = $"{scheme}://{host}/api/accounts/oauth-callback";
+
+    var url = await svc.GetAuthorizationUrlAsync(id, redirectUri);
+    if (url == null) return Results.NotFound();
+    return Results.Ok(new { authorizationUrl = url });
+});
+
+accounts.MapPost("/{id:int}/revoke", async (int id, YouTubeAccountService svc) =>
+    await svc.RevokeAsync(id) ? Results.Ok() : Results.NotFound());
+
+// OAuth callback — Google redirects here after the user grants access.
+app.MapGet("/api/accounts/oauth-callback", async (string? code, string? state, string? error, YouTubeAccountService svc, HttpContext ctx) =>
+{
+    if (!string.IsNullOrEmpty(error))
+    {
+        return Results.Content(BuildOAuthResultPage(false, $"Google denied access: {error}"), "text/html");
+    }
+
+    if (string.IsNullOrEmpty(code) || string.IsNullOrEmpty(state))
+    {
+        return Results.Content(BuildOAuthResultPage(false, "Missing authorization code or state."), "text/html");
+    }
+
+    var scheme = ctx.Request.Scheme;
+    var host = ctx.Request.Host;
+    var redirectUri = $"{scheme}://{host}/api/accounts/oauth-callback";
+
+    var (success, _, err) = await svc.HandleOAuthCallbackAsync(code, state, redirectUri);
+    return Results.Content(BuildOAuthResultPage(success, success ? "Authorization successful! You can close this tab." : err ?? "Unknown error"), "text/html");
+});
+
+static string BuildOAuthResultPage(bool success, string message)
+{
+    var icon = success ? "&#10003;" : "&#10007;";
+    var color = success ? "#22c55e" : "#ef4444";
+    var heading = success ? "Authorization Complete" : "Authorization Failed";
+    var encodedMessage = System.Net.WebUtility.HtmlEncode(message);
+    var successJs = success ? "true" : "false";
+
+    return $$"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Vod2Tube - YouTube Authorization</title>
+            <style>
+                body { font-family: 'Inter', -apple-system, system-ui, sans-serif; background: #0b1326; color: #dae2fd; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
+                .card { background: #171f33; border-radius: 16px; padding: 48px; text-align: center; max-width: 440px; box-shadow: 0 10px 30px rgba(6,14,32,0.5); border: 1px solid rgba(255,255,255,0.05); }
+                .icon { font-size: 64px; color: {{color}}; margin-bottom: 16px; }
+                h1 { font-size: 22px; margin: 0 0 12px; font-weight: 800; }
+                p { color: #c2c6d6; font-size: 14px; line-height: 1.6; margin: 0; }
+                .close-hint { margin-top: 24px; font-size: 12px; color: #6b7280; }
+            </style>
+        </head>
+        <body>
+            <div class="card">
+                <div class="icon">{{icon}}</div>
+                <h1>{{heading}}</h1>
+                <p>{{encodedMessage}}</p>
+                <p class="close-hint">You can safely close this tab and return to Vod2Tube.</p>
+            </div>
+            <script>
+                if (window.opener) {
+                    window.opener.postMessage({ type: 'vod2tube-oauth-complete', success: {{successJs}} }, '*');
+                }
+            </script>
+        </body>
+        </html>
+        """;
+}
 
 // ── Filesystem browser ────────────────────────────────────────────────────────
 
@@ -245,3 +378,5 @@ app.MapPost("/api/filesystem/reveal", (RevealRequest req, HttpContext ctx) =>
 app.Run();
 
 record RevealRequest(string Path);
+record CreateAccountRequest(string Name, string ClientSecretsJson);
+record UpdateAccountRequest(string Name);
