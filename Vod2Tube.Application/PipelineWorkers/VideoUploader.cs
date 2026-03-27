@@ -10,6 +10,7 @@ using Google.Apis.YouTube.v3;
 using Google.Apis.YouTube.v3.Data;
 using Microsoft.EntityFrameworkCore;
 using Vod2Tube.Application.Models;
+using Vod2Tube.Application.Services;
 using Vod2Tube.Infrastructure;
 
 namespace Vod2Tube.Application
@@ -28,6 +29,7 @@ namespace Vod2Tube.Application
     public class VideoUploader
     {
         private readonly AppDbContext _dbContext;
+        private readonly YouTubeAccountService _accountService;
         private static readonly string[] Scopes = { YouTubeService.Scope.YoutubeUpload };
         private static readonly string ApplicationName = "Vod2Tube";
 
@@ -47,9 +49,10 @@ namespace Vod2Tube.Application
             CredentialsDir.Create();
         }
 
-        public VideoUploader(AppDbContext dbContext)
+        public VideoUploader(AppDbContext dbContext, YouTubeAccountService accountService)
         {
             _dbContext = dbContext;
+            _accountService = accountService;
         }
 
         public virtual async IAsyncEnumerable<ProgressStatus> RunAsync(string vodId, string finalFilePath,
@@ -80,7 +83,7 @@ namespace Vod2Tube.Application
             }
 
             yield return ProgressStatus.Indeterminate("Authenticating with YouTube...");
-            var youtubeService = await GetYouTubeServiceAsync(ct);
+            var youtubeService = await GetYouTubeServiceForVodAsync(vodId, ct);
 
             yield return ProgressStatus.Indeterminate("Preparing video for upload...");
             var video = new Video
@@ -224,6 +227,31 @@ namespace Vod2Tube.Application
                 await AddVideoToPlaylistAsync(youtubeService, uploadedVideoId, options.PlaylistId, ct);
                 yield return ProgressStatus.WithProgress("Video added to playlist!", 100);
             }
+        }
+
+        /// <summary>
+        /// Resolves the correct YouTube account for a VOD by looking up the channel's
+        /// assigned account. Falls back to the legacy single-credential flow when no
+        /// account is assigned.
+        /// </summary>
+        private async Task<YouTubeService> GetYouTubeServiceForVodAsync(string vodId, CancellationToken ct)
+        {
+            // Look up channel → YouTube account mapping
+            var vod = await _dbContext.TwitchVods.FirstOrDefaultAsync(v => v.Id == vodId, ct);
+            if (vod != null)
+            {
+                var channel = await _dbContext.Channels
+                    .FirstOrDefaultAsync(c => c.ChannelName == vod.ChannelName, ct);
+
+                if (channel?.YouTubeAccountId != null)
+                {
+                    return await _accountService.GetYouTubeServiceForAccountAsync(
+                        channel.YouTubeAccountId.Value, ct);
+                }
+            }
+
+            // Fallback to legacy single-credential flow
+            return await GetYouTubeServiceAsync(ct);
         }
 
         private async Task<YouTubeService> GetYouTubeServiceAsync(CancellationToken ct)

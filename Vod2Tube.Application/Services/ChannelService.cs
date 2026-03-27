@@ -40,6 +40,7 @@ namespace Vod2Tube.Application.Services
 
             existing.ChannelName = channel.ChannelName.Trim().ToLowerInvariant();
             existing.Active = channel.Active;
+            existing.YouTubeAccountId = channel.YouTubeAccountId;
 
             await _dbContext.SaveChangesAsync();
             return true;

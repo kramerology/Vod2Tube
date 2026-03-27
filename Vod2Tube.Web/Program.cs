@@ -43,6 +43,7 @@ builder.Services.AddScoped<ChatRenderer>();
 builder.Services.AddScoped<FinalRenderer>();
 builder.Services.AddScoped<VideoUploader>();
 builder.Services.AddScoped<VodDownloader>();
+builder.Services.AddScoped<YouTubeAccountService>();
 
 builder.Services.AddHostedService<VodPopulator>();
 builder.Services.AddHostedService<JobManager>();
