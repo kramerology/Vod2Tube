@@ -69,6 +69,18 @@ namespace Vod2Tube.Application
             var vodMetadata = await _dbContext.TwitchVods.FirstOrDefaultAsync(v => v.Id == vodId, ct);
             var pipeline = await _dbContext.Pipelines.FirstOrDefaultAsync(p => p.VodId == vodId, ct);
 
+            // Resolve channel name from the already-loaded VOD metadata
+            var channelName = vodMetadata?.ChannelName;
+
+            // Resolve the YouTube account for this channel (null = no account assigned)
+            var accountId = await ResolveYouTubeAccountIdAsync(channelName, ct);
+            if (accountId == null)
+            {
+                yield return ProgressStatus.WithProgress(
+                    $"Skipping upload: no YouTube account assigned to channel '{channelName ?? "(unknown)"}'.", 100);
+                yield break;
+            }
+
             var options = new VideoUploaderOptions();
             if (vodMetadata != null)
             {
@@ -83,7 +95,7 @@ namespace Vod2Tube.Application
             }
 
             yield return ProgressStatus.Indeterminate("Authenticating with YouTube...");
-            var youtubeService = await GetYouTubeServiceForVodAsync(vodId, ct);
+            var youtubeService = await _accountService.GetYouTubeServiceForAccountAsync(accountId.Value, ct);
 
             yield return ProgressStatus.Indeterminate("Preparing video for upload...");
             var video = new Video
@@ -230,49 +242,20 @@ namespace Vod2Tube.Application
         }
 
         /// <summary>
-        /// Resolves the correct YouTube account for a VOD by looking up the channel's
-        /// assigned account. Throws an <see cref="InvalidOperationException"/> when no
-        /// account is assigned or the VOD/channel cannot be resolved.
+        /// Resolves the YouTube account ID for the given channel name.
+        /// Returns <c>null</c> when the channel name is unknown, the channel is not
+        /// found, or no YouTube account has been assigned — allowing the caller to
+        /// skip the upload gracefully.
         /// </summary>
-        private async Task<YouTubeService> GetYouTubeServiceForVodAsync(string vodId, CancellationToken ct)
+        internal async Task<int?> ResolveYouTubeAccountIdAsync(string? channelName, CancellationToken ct)
         {
-            var accountId = await ResolveYouTubeAccountIdAsync(vodId, ct);
-            return await _accountService.GetYouTubeServiceForAccountAsync(accountId, ct);
-        }
+            if (string.IsNullOrEmpty(channelName))
+                return null;
 
-        /// <summary>
-        /// Resolves the YouTube account ID for the given VOD by looking up the channel's
-        /// assigned account. Throws <see cref="InvalidOperationException"/> with a clear
-        /// message when the VOD, channel, or account assignment is missing.
-        /// </summary>
-        internal async Task<int> ResolveYouTubeAccountIdAsync(string vodId, CancellationToken ct)
-        {
-            // Look up VOD
-            var vod = await _dbContext.TwitchVods.FirstOrDefaultAsync(v => v.Id == vodId, ct);
-            if (vod == null)
-            {
-                throw new InvalidOperationException(
-                    $"Cannot resolve YouTube account: Twitch VOD with ID '{vodId}' was not found.");
-            }
-
-            // Look up channel → YouTube account mapping
             var channel = await _dbContext.Channels
-                .FirstOrDefaultAsync(c => c.ChannelName == vod.ChannelName, ct);
+                .FirstOrDefaultAsync(c => c.ChannelName == channelName, ct);
 
-            if (channel == null)
-            {
-                throw new InvalidOperationException(
-                    $"Cannot resolve YouTube account: Channel '{vod.ChannelName}' (for VOD '{vodId}') was not found.");
-            }
-
-            if (channel.YouTubeAccountId == null)
-            {
-                throw new InvalidOperationException(
-                    $"Cannot resolve YouTube account: Channel '{channel.ChannelName}' has no YouTube account assigned. " +
-                    "Please assign a YouTube account to this channel in the Accounts page.");
-            }
-
-            return channel.YouTubeAccountId.Value;
+            return channel?.YouTubeAccountId;
         }
 
         private async Task<YouTubeService> GetYouTubeServiceAsync(CancellationToken ct)
