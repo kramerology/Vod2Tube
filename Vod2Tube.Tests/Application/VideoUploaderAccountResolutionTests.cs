@@ -12,7 +12,7 @@ namespace Vod2Tube.Tests.Application;
 
 /// <summary>
 /// Tests for <see cref="VideoUploader.ResolveYouTubeAccountIdAsync"/>
-/// verifying correct account resolution and error messages.
+/// verifying correct account resolution and skip-when-unassigned behavior.
 /// </summary>
 public class VideoUploaderAccountResolutionTests
 {
@@ -25,7 +25,7 @@ public class VideoUploaderAccountResolutionTests
     }
 
     /// <summary>
-    /// When the VOD exists and the channel has an account assigned,
+    /// When the channel has an account assigned,
     /// the method should return the account ID.
     /// </summary>
     [Test]
@@ -34,62 +34,71 @@ public class VideoUploaderAccountResolutionTests
         await using var ctx = CreateInMemoryContext(nameof(ResolveYouTubeAccountIdAsync_ChannelHasAccount_ReturnsAccountId));
 
         ctx.Channels.Add(new Channel { ChannelName = "streamer1", Active = true, YouTubeAccountId = 5 });
-        ctx.TwitchVods.Add(new TwitchVod { Id = "vod123", ChannelName = "streamer1", Title = "Test", Url = "https://twitch.tv/videos/vod123" });
         await ctx.SaveChangesAsync();
 
-        // Pass null for accountService — ResolveYouTubeAccountIdAsync doesn't use it
         var uploader = new VideoUploader(ctx, null!);
-        var result = await uploader.ResolveYouTubeAccountIdAsync("vod123", CancellationToken.None);
+        var result = await uploader.ResolveYouTubeAccountIdAsync("streamer1", CancellationToken.None);
 
         await Assert.That(result).IsEqualTo(5);
     }
 
     /// <summary>
-    /// When the VOD does not exist, the method should throw.
+    /// When the channel name is null, the method should return null (skip upload).
     /// </summary>
     [Test]
-    public async Task ResolveYouTubeAccountIdAsync_VodNotFound_Throws()
+    public async Task ResolveYouTubeAccountIdAsync_NullChannelName_ReturnsNull()
     {
-        await using var ctx = CreateInMemoryContext(nameof(ResolveYouTubeAccountIdAsync_VodNotFound_Throws));
+        await using var ctx = CreateInMemoryContext(nameof(ResolveYouTubeAccountIdAsync_NullChannelName_ReturnsNull));
 
         var uploader = new VideoUploader(ctx, null!);
+        var result = await uploader.ResolveYouTubeAccountIdAsync(null, CancellationToken.None);
 
-        await Assert.That(async () => await uploader.ResolveYouTubeAccountIdAsync("missing", CancellationToken.None))
-            .ThrowsExactly<InvalidOperationException>();
+        await Assert.That(result).IsNull();
     }
 
     /// <summary>
-    /// When the VOD exists but no matching channel exists, the method should throw.
+    /// When the channel name is empty, the method should return null (skip upload).
     /// </summary>
     [Test]
-    public async Task ResolveYouTubeAccountIdAsync_ChannelNotFound_Throws()
+    public async Task ResolveYouTubeAccountIdAsync_EmptyChannelName_ReturnsNull()
     {
-        await using var ctx = CreateInMemoryContext(nameof(ResolveYouTubeAccountIdAsync_ChannelNotFound_Throws));
-
-        ctx.TwitchVods.Add(new TwitchVod { Id = "vod456", ChannelName = "unknown", Title = "Test", Url = "https://twitch.tv/videos/vod456" });
-        await ctx.SaveChangesAsync();
+        await using var ctx = CreateInMemoryContext(nameof(ResolveYouTubeAccountIdAsync_EmptyChannelName_ReturnsNull));
 
         var uploader = new VideoUploader(ctx, null!);
+        var result = await uploader.ResolveYouTubeAccountIdAsync("", CancellationToken.None);
 
-        await Assert.That(async () => await uploader.ResolveYouTubeAccountIdAsync("vod456", CancellationToken.None))
-            .ThrowsExactly<InvalidOperationException>();
+        await Assert.That(result).IsNull();
     }
 
     /// <summary>
-    /// When the channel exists but has no YouTube account assigned, the method should throw.
+    /// When no matching channel exists, the method should return null (skip upload).
     /// </summary>
     [Test]
-    public async Task ResolveYouTubeAccountIdAsync_NoAccountAssigned_Throws()
+    public async Task ResolveYouTubeAccountIdAsync_ChannelNotFound_ReturnsNull()
     {
-        await using var ctx = CreateInMemoryContext(nameof(ResolveYouTubeAccountIdAsync_NoAccountAssigned_Throws));
+        await using var ctx = CreateInMemoryContext(nameof(ResolveYouTubeAccountIdAsync_ChannelNotFound_ReturnsNull));
+
+        var uploader = new VideoUploader(ctx, null!);
+        var result = await uploader.ResolveYouTubeAccountIdAsync("unknown", CancellationToken.None);
+
+        await Assert.That(result).IsNull();
+    }
+
+    /// <summary>
+    /// When the channel exists but has no YouTube account assigned, the method
+    /// should return null (skip upload).
+    /// </summary>
+    [Test]
+    public async Task ResolveYouTubeAccountIdAsync_NoAccountAssigned_ReturnsNull()
+    {
+        await using var ctx = CreateInMemoryContext(nameof(ResolveYouTubeAccountIdAsync_NoAccountAssigned_ReturnsNull));
 
         ctx.Channels.Add(new Channel { ChannelName = "noaccount", Active = true, YouTubeAccountId = null });
-        ctx.TwitchVods.Add(new TwitchVod { Id = "vod789", ChannelName = "noaccount", Title = "Test", Url = "https://twitch.tv/videos/vod789" });
         await ctx.SaveChangesAsync();
 
         var uploader = new VideoUploader(ctx, null!);
+        var result = await uploader.ResolveYouTubeAccountIdAsync("noaccount", CancellationToken.None);
 
-        await Assert.That(async () => await uploader.ResolveYouTubeAccountIdAsync("vod789", CancellationToken.None))
-            .ThrowsExactly<InvalidOperationException>();
+        await Assert.That(result).IsNull();
     }
 }
