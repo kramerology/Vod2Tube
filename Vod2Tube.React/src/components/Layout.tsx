@@ -9,6 +9,7 @@ interface NavItem {
 const NAV: NavItem[] = [
   { to: '/channels', icon: 'grid_view',        label: 'Channels'  },
   { to: '/vods',     icon: 'queue_play_next',   label: 'VOD Queue' },
+  { to: '/accounts', icon: 'smart_display',     label: 'Accounts'  },
   { to: '/settings', icon: 'settings',          label: 'Settings'  },
 ];
 

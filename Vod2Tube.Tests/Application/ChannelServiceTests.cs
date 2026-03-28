@@ -167,6 +167,81 @@ public class ChannelServiceTests
     }
 
     /// <summary>
+    /// <see cref="ChannelService.UpdateChannelAsync"/> should persist
+    /// <see cref="Channel.YouTubeAccountId"/> when it is set to a non-null value.
+    /// </summary>
+    [Test]
+    public async Task UpdateChannelAsync_SetsYouTubeAccountId()
+    {
+        await using var ctx = CreateInMemoryContext(nameof(UpdateChannelAsync_SetsYouTubeAccountId));
+        var service = new ChannelService(ctx);
+
+        var channel = await service.AddNewChannelAsync(new Channel { ChannelName = "accttest", Active = true });
+
+        await service.UpdateChannelAsync(new Channel
+        {
+            Id = channel.Id,
+            ChannelName = "accttest",
+            Active = true,
+            YouTubeAccountId = 42
+        });
+
+        var updated = await service.GetChannelByIdAsync(channel.Id);
+
+        await Assert.That(updated!.YouTubeAccountId).IsEqualTo(42);
+    }
+
+    /// <summary>
+    /// <see cref="ChannelService.UpdateChannelAsync"/> should clear
+    /// <see cref="Channel.YouTubeAccountId"/> when it is set back to null.
+    /// </summary>
+    [Test]
+    public async Task UpdateChannelAsync_ClearsYouTubeAccountId()
+    {
+        await using var ctx = CreateInMemoryContext(nameof(UpdateChannelAsync_ClearsYouTubeAccountId));
+        var service = new ChannelService(ctx);
+
+        var channel = await service.AddNewChannelAsync(new Channel { ChannelName = "cleartest", Active = true });
+
+        // First set it
+        await service.UpdateChannelAsync(new Channel
+        {
+            Id = channel.Id,
+            ChannelName = "cleartest",
+            Active = true,
+            YouTubeAccountId = 7
+        });
+
+        // Now clear it
+        await service.UpdateChannelAsync(new Channel
+        {
+            Id = channel.Id,
+            ChannelName = "cleartest",
+            Active = true,
+            YouTubeAccountId = null
+        });
+
+        var updated = await service.GetChannelByIdAsync(channel.Id);
+
+        await Assert.That(updated!.YouTubeAccountId).IsNull();
+    }
+
+    /// <summary>
+    /// A newly added channel should have <see cref="Channel.YouTubeAccountId"/> as null
+    /// by default.
+    /// </summary>
+    [Test]
+    public async Task AddNewChannelAsync_DefaultYouTubeAccountId_IsNull()
+    {
+        await using var ctx = CreateInMemoryContext(nameof(AddNewChannelAsync_DefaultYouTubeAccountId_IsNull));
+        var service = new ChannelService(ctx);
+
+        var channel = await service.AddNewChannelAsync(new Channel { ChannelName = "defaultacct" });
+
+        await Assert.That(channel.YouTubeAccountId).IsNull();
+    }
+
+    /// <summary>
     /// Updating only the <see cref="Channel.Active"/> flag should leave the channel
     /// name unchanged.
     /// </summary>

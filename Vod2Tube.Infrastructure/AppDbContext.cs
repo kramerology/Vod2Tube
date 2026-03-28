@@ -14,6 +14,7 @@ namespace Vod2Tube.Infrastructure
         public DbSet<TwitchVod> TwitchVods { get; set; }
         public DbSet<Pipeline> Pipelines { get; set; }
         public DbSet<Setting> Settings { get; set; }
+        public DbSet<YouTubeAccount> YouTubeAccounts { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -23,6 +24,11 @@ namespace Vod2Tube.Infrastructure
             modelBuilder.Entity<Channel>(entity =>
             {
                 entity.HasKey(c => c.Id);
+                entity.HasIndex(c => c.YouTubeAccountId);
+                entity.HasOne<YouTubeAccount>()
+                    .WithMany()
+                    .HasForeignKey(c => c.YouTubeAccountId)
+                    .OnDelete(DeleteBehavior.SetNull);
             });
 
             modelBuilder.Entity<TwitchVod>(entity =>
@@ -38,6 +44,11 @@ namespace Vod2Tube.Infrastructure
             {
                 entity.HasKey(s => s.Id);
                 entity.HasIndex(s => s.Key).IsUnique();
+            });
+
+            modelBuilder.Entity<YouTubeAccount>(entity =>
+            {
+                entity.HasKey(a => a.Id);
             });
         }
     }

@@ -1,25 +1,28 @@
 import { useEffect, useState } from 'react';
-import { channelsApi, type Channel } from '../api/client';
+import { channelsApi, accountsApi, type Channel, type YouTubeAccount } from '../api/client';
 
 // ── Add / Edit dialog ─────────────────────────────────────────────────────────
 
 function ChannelDialog({
   channel,
+  accounts,
   onSave,
   onClose,
 }: {
   channel: Partial<Channel>;
+  accounts: YouTubeAccount[];
   onSave: (c: Partial<Channel>) => Promise<void>;
   onClose: () => void;
 }) {
   const [name, setName] = useState(channel.channelName ?? '');
   const [active, setActive] = useState(channel.active ?? true);
+  const [accountId, setAccountId] = useState<number | null>(channel.youTubeAccountId ?? null);
   const [saving, setSaving] = useState(false);
 
   async function handleSave() {
     if (!name.trim()) return;
     setSaving(true);
-    await onSave({ ...channel, channelName: name.trim(), active });
+    await onSave({ ...channel, channelName: name.trim(), active, youTubeAccountId: accountId });
     setSaving(false);
   }
 
@@ -47,8 +50,8 @@ function ChannelDialog({
           />
         </div>
 
-        <label className="flex items-center gap-3 cursor-pointer mb-6 select-none">
-          <label className="relative inline-flex items-center cursor-pointer">
+        <label className="flex items-center gap-3 cursor-pointer mb-5 select-none">
+          <span className="relative inline-flex items-center cursor-pointer">
             <input
               type="checkbox"
               className="sr-only peer"
@@ -56,11 +59,35 @@ function ChannelDialog({
               onChange={() => setActive(v => !v)}
             />
             <div className="w-11 h-6 bg-surface-container-highest rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary" />
-          </label>
+          </span>
           <span className="text-sm text-on-surface-variant">
             {active ? 'Active — monitor for new VODs' : 'Paused'}
           </span>
         </label>
+
+        <label className="block mb-1 text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">
+          YouTube Account
+        </label>
+        <div className="relative mb-6">
+          <span className="absolute inset-y-0 left-3 flex items-center text-on-surface-variant material-symbols-outlined text-lg">
+            smart_display
+          </span>
+          <select
+            className="w-full bg-surface-container-highest border border-outline-variant/20 rounded-lg py-3 pl-10 pr-4 text-on-surface focus:outline-none focus:ring-1 focus:ring-primary/50 transition-all appearance-none cursor-pointer"
+            value={accountId ?? ''}
+            onChange={e => setAccountId(e.target.value ? Number(e.target.value) : null)}
+          >
+            <option value="">No account (legacy default)</option>
+            {accounts.map(a => (
+              <option key={a.id} value={a.id}>
+                {a.name}{a.channelTitle ? ` — ${a.channelTitle}` : ''}{a.isAuthorized ? '' : ' ⚠️ Not authorized'}
+              </option>
+            ))}
+          </select>
+          <span className="absolute inset-y-0 right-3 flex items-center text-on-surface-variant material-symbols-outlined text-lg pointer-events-none">
+            expand_more
+          </span>
+        </div>
 
         <div className="flex justify-end gap-3">
           <button
@@ -87,12 +114,14 @@ function ChannelDialog({
 function ChannelRow({
   channel,
   avatarUrl,
+  accountName,
   onEdit,
   onToggle,
   onDelete,
 }: {
   channel: Channel;
   avatarUrl?: string;
+  accountName?: string;
   onEdit: () => void;
   onToggle: () => void;
   onDelete: () => void;
@@ -147,9 +176,21 @@ function ChannelRow({
             </span>
           )}
         </div>
-        <p className="text-sm text-on-surface-variant mb-3">
+        <p className="text-sm text-on-surface-variant mb-1">
           Automated VOD archival pipeline. Added {added}.
         </p>
+        {accountName && (
+          <p className="text-xs text-primary/80 mb-2 flex items-center gap-1">
+            <span className="material-symbols-outlined text-xs">smart_display</span>
+            Uploads to: {accountName}
+          </p>
+        )}
+        {!accountName && channel.youTubeAccountId == null && (
+          <p className="text-xs text-on-surface-variant/50 mb-2 flex items-center gap-1">
+            <span className="material-symbols-outlined text-xs">link_off</span>
+            No YouTube account assigned
+          </p>
+        )}
         <div className="flex items-center gap-4">
           <button
             onClick={onEdit}
@@ -189,6 +230,7 @@ function ChannelRow({
 
 export default function ChannelsPage() {
   const [channels, setChannels] = useState<Channel[]>([]);
+  const [accounts, setAccounts] = useState<YouTubeAccount[]>([]);
   const [avatarUrls, setAvatarUrls] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -201,6 +243,7 @@ export default function ChannelsPage() {
       const data = await channelsApi.getAll();
       setChannels(data);
       channelsApi.getAvatarUrls().then(setAvatarUrls).catch(() => {});
+      accountsApi.getAll().then(setAccounts).catch(() => {});
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -214,7 +257,7 @@ export default function ChannelsPage() {
     if (c.id) {
       await channelsApi.update(c as Channel);
     } else {
-      await channelsApi.create({ channelName: c.channelName!, active: c.active ?? true });
+      await channelsApi.create({ channelName: c.channelName!, active: c.active ?? true, youTubeAccountId: c.youTubeAccountId ?? null });
     }
     setDialog(null);
     await load();
@@ -282,6 +325,7 @@ export default function ChannelsPage() {
               key={c.id}
               channel={c}
               avatarUrl={avatarUrls[c.channelName.toLowerCase()]}
+              accountName={accounts.find(a => a.id === c.youTubeAccountId)?.name}
               onEdit={() => setDialog({ ...c })}
               onToggle={() => handleToggle(c)}
               onDelete={() => setConfirmDelete(c)}
@@ -329,6 +373,7 @@ export default function ChannelsPage() {
       {dialog !== null && (
         <ChannelDialog
           channel={dialog}
+          accounts={accounts}
           onSave={handleSave}
           onClose={() => setDialog(null)}
         />

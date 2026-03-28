@@ -210,7 +210,7 @@ public class VideoUploaderResumableTests
         public string? ResumedFromUri { get; private set; }
         public bool UriWasStoredMidUpload { get; private set; }
 
-        public RecordingVideoUploader(AppDbContext ctx) : base(ctx)
+        public RecordingVideoUploader(AppDbContext ctx) : base(ctx, null!)
         {
             _ctx = ctx;
         }

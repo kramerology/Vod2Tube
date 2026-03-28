@@ -24,6 +24,7 @@ export interface Channel {
   channelName: string;
   addedAtUTC: string;
   active: boolean;
+  youTubeAccountId: number | null;
 }
 
 export interface PipelineJob {
@@ -61,7 +62,7 @@ export interface PipelineJob {
 export const channelsApi = {
   getAll: () => request<Channel[]>('/channels'),
 
-  create: (channel: Pick<Channel, 'channelName' | 'active'>) =>
+  create: (channel: Pick<Channel, 'channelName' | 'active'> & { youTubeAccountId?: number | null }) =>
     request<Channel>('/channels', {
       method: 'POST',
       body: JSON.stringify(channel),
@@ -78,6 +79,43 @@ export const channelsApi = {
 
   getAvatarUrls: () =>
     request<Record<string, string>>('/channels/avatars'),
+};
+
+// ── YouTube Accounts ──────────────────────────────────────────────────────────
+
+export interface YouTubeAccount {
+  id: number;
+  name: string;
+  addedAtUTC: string;
+  channelTitle: string;
+  isAuthorized: boolean;
+}
+
+export const accountsApi = {
+  getAll: () => request<YouTubeAccount[]>('/accounts'),
+
+  get: (id: number) => request<YouTubeAccount>(`/accounts/${id}`),
+
+  create: (name: string, clientSecretsJson: string) =>
+    request<YouTubeAccount>('/accounts', {
+      method: 'POST',
+      body: JSON.stringify({ name, clientSecretsJson }),
+    }),
+
+  update: (id: number, name: string) =>
+    request<void>(`/accounts/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ name }),
+    }),
+
+  delete: (id: number) =>
+    request<void>(`/accounts/${id}`, { method: 'DELETE' }),
+
+  authorize: (id: number) =>
+    request<{ authorizationUrl: string }>(`/accounts/${id}/authorize`, { method: 'POST' }),
+
+  revoke: (id: number) =>
+    request<void>(`/accounts/${id}/revoke`, { method: 'POST' }),
 };
 
 // ── Pipeline / VODs endpoints ─────────────────────────────────────────────────

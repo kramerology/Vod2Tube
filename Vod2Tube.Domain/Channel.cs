@@ -9,5 +9,12 @@
         public DateTime AddedAtUTC { get; set; }
 
         public bool Active { get; set; }
+
+        /// <summary>
+        /// Optional FK to the YouTube account used for uploads from this channel.
+        /// When null, no account is assigned and the upload stage is skipped.
+        /// </summary>
+        public int? YouTubeAccountId { get; set; }
     }
 }
+
