@@ -38,6 +38,8 @@ namespace Vod2Tube.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("YouTubeAccountId");
+
                     b.ToTable("Channels");
                 });
 
@@ -195,6 +197,14 @@ namespace Vod2Tube.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("YouTubeAccounts");
+                });
+
+            modelBuilder.Entity("Vod2Tube.Domain.Channel", b =>
+                {
+                    b.HasOne("Vod2Tube.Domain.YouTubeAccount", null)
+                        .WithMany()
+                        .HasForeignKey("YouTubeAccountId")
+                        .OnDelete(DeleteBehavior.SetNull);
                 });
 #pragma warning restore 612, 618
         }

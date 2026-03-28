@@ -487,7 +487,7 @@ export default function AccountsPage() {
   async function handleAuthorize(account: YouTubeAccount) {
     try {
       const { authorizationUrl } = await accountsApi.authorize(account.id);
-      window.open(authorizationUrl, '_blank', 'noopener');
+      window.open(authorizationUrl, '_blank');
     } catch (e) {
       setError((e as Error).message);
     }

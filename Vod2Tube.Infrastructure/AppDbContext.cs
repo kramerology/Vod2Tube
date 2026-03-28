@@ -24,6 +24,11 @@ namespace Vod2Tube.Infrastructure
             modelBuilder.Entity<Channel>(entity =>
             {
                 entity.HasKey(c => c.Id);
+                entity.HasIndex(c => c.YouTubeAccountId);
+                entity.HasOne<YouTubeAccount>()
+                    .WithMany()
+                    .HasForeignKey(c => c.YouTubeAccountId)
+                    .OnDelete(DeleteBehavior.SetNull);
             });
 
             modelBuilder.Entity<TwitchVod>(entity =>

@@ -231,27 +231,48 @@ namespace Vod2Tube.Application
 
         /// <summary>
         /// Resolves the correct YouTube account for a VOD by looking up the channel's
-        /// assigned account. Falls back to the legacy single-credential flow when no
-        /// account is assigned.
+        /// assigned account. Throws an <see cref="InvalidOperationException"/> when no
+        /// account is assigned or the VOD/channel cannot be resolved.
         /// </summary>
         private async Task<YouTubeService> GetYouTubeServiceForVodAsync(string vodId, CancellationToken ct)
         {
-            // Look up channel → YouTube account mapping
-            var vod = await _dbContext.TwitchVods.FirstOrDefaultAsync(v => v.Id == vodId, ct);
-            if (vod != null)
-            {
-                var channel = await _dbContext.Channels
-                    .FirstOrDefaultAsync(c => c.ChannelName == vod.ChannelName, ct);
+            var accountId = await ResolveYouTubeAccountIdAsync(vodId, ct);
+            return await _accountService.GetYouTubeServiceForAccountAsync(accountId, ct);
+        }
 
-                if (channel?.YouTubeAccountId != null)
-                {
-                    return await _accountService.GetYouTubeServiceForAccountAsync(
-                        channel.YouTubeAccountId.Value, ct);
-                }
+        /// <summary>
+        /// Resolves the YouTube account ID for the given VOD by looking up the channel's
+        /// assigned account. Throws <see cref="InvalidOperationException"/> with a clear
+        /// message when the VOD, channel, or account assignment is missing.
+        /// </summary>
+        internal async Task<int> ResolveYouTubeAccountIdAsync(string vodId, CancellationToken ct)
+        {
+            // Look up VOD
+            var vod = await _dbContext.TwitchVods.FirstOrDefaultAsync(v => v.Id == vodId, ct);
+            if (vod == null)
+            {
+                throw new InvalidOperationException(
+                    $"Cannot resolve YouTube account: Twitch VOD with ID '{vodId}' was not found.");
             }
 
-            // Fallback to legacy single-credential flow
-            return await GetYouTubeServiceAsync(ct);
+            // Look up channel → YouTube account mapping
+            var channel = await _dbContext.Channels
+                .FirstOrDefaultAsync(c => c.ChannelName == vod.ChannelName, ct);
+
+            if (channel == null)
+            {
+                throw new InvalidOperationException(
+                    $"Cannot resolve YouTube account: Channel '{vod.ChannelName}' (for VOD '{vodId}') was not found.");
+            }
+
+            if (channel.YouTubeAccountId == null)
+            {
+                throw new InvalidOperationException(
+                    $"Cannot resolve YouTube account: Channel '{channel.ChannelName}' has no YouTube account assigned. " +
+                    "Please assign a YouTube account to this channel in the Accounts page.");
+            }
+
+            return channel.YouTubeAccountId.Value;
         }
 
         private async Task<YouTubeService> GetYouTubeServiceAsync(CancellationToken ct)

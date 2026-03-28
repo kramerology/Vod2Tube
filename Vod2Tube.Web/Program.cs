@@ -63,7 +63,7 @@ app.UseAntiforgery();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    await db.Database.EnsureCreatedAsync();
+    await db.Database.MigrateAsync();
 }
 
 app.MapRazorComponents<Vod2Tube.Web.Components.App>()
