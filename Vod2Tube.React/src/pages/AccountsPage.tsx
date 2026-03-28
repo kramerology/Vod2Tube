@@ -456,7 +456,13 @@ export default function AccountsPage() {
 
   // Listen for OAuth completion from popup window
   useEffect(() => {
+    const allowedOrigin = window.location.origin;
+
     function handleMessage(event: MessageEvent) {
+      if (event.origin !== allowedOrigin) {
+        return;
+      }
+
       if (event.data?.type === 'vod2tube-oauth-complete') {
         // Refresh the list to pick up the new auth status
         load();
