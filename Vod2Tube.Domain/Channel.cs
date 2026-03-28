@@ -12,7 +12,7 @@
 
         /// <summary>
         /// Optional FK to the YouTube account used for uploads from this channel.
-        /// When null, no account is assigned and uploads will fail with a clear message.
+        /// When null, no account is assigned and uploads will fail with a clear error.
         /// </summary>
         public int? YouTubeAccountId { get; set; }
     }

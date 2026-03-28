@@ -32,11 +32,32 @@ namespace Vod2Tube.Infrastructure.Migrations
                 {
                     table.PrimaryKey("PK_YouTubeAccounts", x => x.Id);
                 });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Channels_YouTubeAccountId",
+                table: "Channels",
+                column: "YouTubeAccountId");
+
+            migrationBuilder.AddForeignKey(
+                name: "FK_Channels_YouTubeAccounts_YouTubeAccountId",
+                table: "Channels",
+                column: "YouTubeAccountId",
+                principalTable: "YouTubeAccounts",
+                principalColumn: "Id",
+                onDelete: ReferentialAction.SetNull);
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.DropForeignKey(
+                name: "FK_Channels_YouTubeAccounts_YouTubeAccountId",
+                table: "Channels");
+
+            migrationBuilder.DropIndex(
+                name: "IX_Channels_YouTubeAccountId",
+                table: "Channels");
+
             migrationBuilder.DropTable(
                 name: "YouTubeAccounts");
 

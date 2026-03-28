@@ -51,7 +51,7 @@ function ChannelDialog({
         </div>
 
         <label className="flex items-center gap-3 cursor-pointer mb-5 select-none">
-          <label className="relative inline-flex items-center cursor-pointer">
+          <span className="relative inline-flex items-center cursor-pointer">
             <input
               type="checkbox"
               className="sr-only peer"
@@ -59,7 +59,7 @@ function ChannelDialog({
               onChange={() => setActive(v => !v)}
             />
             <div className="w-11 h-6 bg-surface-container-highest rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary" />
-          </label>
+          </span>
           <span className="text-sm text-on-surface-variant">
             {active ? 'Active — monitor for new VODs' : 'Paused'}
           </span>
