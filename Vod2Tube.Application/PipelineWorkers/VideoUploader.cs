@@ -10,6 +10,7 @@ using Google.Apis.YouTube.v3;
 using Google.Apis.YouTube.v3.Data;
 using Microsoft.EntityFrameworkCore;
 using Vod2Tube.Application.Models;
+using Vod2Tube.Application.Services;
 using Vod2Tube.Infrastructure;
 
 namespace Vod2Tube.Application
@@ -28,6 +29,7 @@ namespace Vod2Tube.Application
     public class VideoUploader
     {
         private readonly AppDbContext _dbContext;
+        private readonly YouTubeAccountService _accountService;
         private static readonly string[] Scopes = { YouTubeService.Scope.YoutubeUpload };
         private static readonly string ApplicationName = "Vod2Tube";
 
@@ -47,9 +49,10 @@ namespace Vod2Tube.Application
             CredentialsDir.Create();
         }
 
-        public VideoUploader(AppDbContext dbContext)
+        public VideoUploader(AppDbContext dbContext, YouTubeAccountService accountService)
         {
             _dbContext = dbContext;
+            _accountService = accountService;
         }
 
         public virtual async IAsyncEnumerable<ProgressStatus> RunAsync(string vodId, string finalFilePath,
@@ -66,6 +69,18 @@ namespace Vod2Tube.Application
             var vodMetadata = await _dbContext.TwitchVods.FirstOrDefaultAsync(v => v.Id == vodId, ct);
             var pipeline = await _dbContext.Pipelines.FirstOrDefaultAsync(p => p.VodId == vodId, ct);
 
+            // Resolve channel name from the already-loaded VOD metadata
+            var channelName = vodMetadata?.ChannelName;
+
+            // Resolve the YouTube account for this channel (null = no account assigned)
+            var accountId = await ResolveYouTubeAccountIdAsync(channelName, ct);
+            if (accountId == null)
+            {
+                yield return ProgressStatus.WithProgress(
+                    $"Skipping upload: no YouTube account assigned to channel '{channelName ?? "(unknown)"}'.", 100);
+                yield break;
+            }
+
             var options = new VideoUploaderOptions();
             if (vodMetadata != null)
             {
@@ -80,7 +95,7 @@ namespace Vod2Tube.Application
             }
 
             yield return ProgressStatus.Indeterminate("Authenticating with YouTube...");
-            var youtubeService = await GetYouTubeServiceAsync(ct);
+            var youtubeService = await _accountService.GetYouTubeServiceForAccountAsync(accountId.Value, ct);
 
             yield return ProgressStatus.Indeterminate("Preparing video for upload...");
             var video = new Video
@@ -224,6 +239,23 @@ namespace Vod2Tube.Application
                 await AddVideoToPlaylistAsync(youtubeService, uploadedVideoId, options.PlaylistId, ct);
                 yield return ProgressStatus.WithProgress("Video added to playlist!", 100);
             }
+        }
+
+        /// <summary>
+        /// Resolves the YouTube account ID for the given channel name.
+        /// Returns <c>null</c> when the channel name is unknown, the channel is not
+        /// found, or no YouTube account has been assigned — allowing the caller to
+        /// skip the upload gracefully.
+        /// </summary>
+        internal async Task<int?> ResolveYouTubeAccountIdAsync(string? channelName, CancellationToken ct)
+        {
+            if (string.IsNullOrEmpty(channelName))
+                return null;
+
+            var channel = await _dbContext.Channels
+                .FirstOrDefaultAsync(c => c.ChannelName == channelName, ct);
+
+            return channel?.YouTubeAccountId;
         }
 
         private async Task<YouTubeService> GetYouTubeServiceAsync(CancellationToken ct)

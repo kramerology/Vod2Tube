@@ -3,6 +3,7 @@ import Layout from './components/Layout'
 import ChannelsPage from './pages/ChannelsPage'
 import VodsPage from './pages/VodsPage'
 import SettingsPage from './pages/SettingsPage'
+import AccountsPage from './pages/AccountsPage'
 
 export default function App() {
   return (
@@ -12,6 +13,7 @@ export default function App() {
           <Route path="/"         element={<Navigate to="/channels" replace />} />
           <Route path="/channels" element={<ChannelsPage />} />
           <Route path="/vods"     element={<VodsPage />} />
+          <Route path="/accounts" element={<AccountsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*"         element={<Navigate to="/channels" replace />} />
         </Routes>

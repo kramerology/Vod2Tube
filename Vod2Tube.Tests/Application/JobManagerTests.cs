@@ -8,6 +8,7 @@ using TUnit.Assertions.Extensions;
 using Vod2Tube.Application;
 using Vod2Tube.Application.Models;
 using Vod2Tube.Application.PipelineWorkers;
+using Vod2Tube.Application.Services;
 using Vod2Tube.Domain;
 using Vod2Tube.Infrastructure;
 
@@ -41,6 +42,7 @@ public class JobManagerTests
         svc.AddLogging();
         var ds = new TwitchDownloadService(NullLogger<TwitchDownloadService>.Instance, Options.Create(new AppSettings()));
         svc.AddSingleton(ds);
+        svc.AddSingleton<YouTubeAccountService>();
         if (vodDownloader != null)
             svc.AddSingleton(vodDownloader);
         else
@@ -663,7 +665,7 @@ public class JobManagerTests
     /// </summary>
     private sealed class StubVideoUploader : VideoUploader
     {
-        public StubVideoUploader() : base(null!) { }
+        public StubVideoUploader() : base(null!, null!) { }
 
         public override async IAsyncEnumerable<ProgressStatus> RunAsync(string vodId, string finalFilePath,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
@@ -862,6 +864,7 @@ public class JobManagerTests
             svc.AddSingleton<ChatDownloader>();
             svc.AddSingleton<ChatRenderer>();
             svc.AddSingleton<FinalRenderer>();
+            svc.AddSingleton<YouTubeAccountService>();
             svc.AddSingleton<VideoUploader>();
             svc.AddSingleton(new Archiver(archiveOptions, NullLogger<Archiver>.Instance));
             var provider = svc.BuildServiceProvider();

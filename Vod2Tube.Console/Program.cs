@@ -47,6 +47,7 @@ try
             services.AddScoped<Archiver>();
             services.AddScoped<TwitchGraphQLService>();
             services.AddScoped<TwitchDownloadService>();
+            services.AddScoped<YouTubeAccountService>();
 
             // Settings
             services.AddOptions<AppSettings>();
@@ -63,7 +64,7 @@ try
     using (var scope = host.Services.CreateScope())
     {
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        await db.Database.EnsureCreatedAsync();
+        await db.Database.MigrateAsync();
     }
 
     await host.RunAsync();

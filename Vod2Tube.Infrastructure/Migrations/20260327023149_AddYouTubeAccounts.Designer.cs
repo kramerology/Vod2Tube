@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Vod2Tube.Infrastructure;
 
@@ -10,9 +11,11 @@ using Vod2Tube.Infrastructure;
 namespace Vod2Tube.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260327023149_AddYouTubeAccounts")]
+    partial class AddYouTubeAccounts
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.9");
@@ -37,8 +40,6 @@ namespace Vod2Tube.Infrastructure.Migrations
                         .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("YouTubeAccountId");
 
                     b.ToTable("Channels");
                 });
@@ -197,14 +198,6 @@ namespace Vod2Tube.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("YouTubeAccounts");
-                });
-
-            modelBuilder.Entity("Vod2Tube.Domain.Channel", b =>
-                {
-                    b.HasOne("Vod2Tube.Domain.YouTubeAccount", null)
-                        .WithMany()
-                        .HasForeignKey("YouTubeAccountId")
-                        .OnDelete(DeleteBehavior.SetNull);
                 });
 #pragma warning restore 612, 618
         }
