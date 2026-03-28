@@ -251,7 +251,7 @@ static string BuildOAuthResultPage(bool success, string message)
             </div>
             <script>
                 if (window.opener) {
-                    window.opener.postMessage({ type: 'vod2tube-oauth-complete', success: {{successJs}} }, '*');
+                    window.opener.postMessage({ type: 'vod2tube-oauth-complete', success: {{successJs}} }, window.location.origin);
                 }
             </script>
         </body>
