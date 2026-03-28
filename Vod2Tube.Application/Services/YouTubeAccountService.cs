@@ -32,11 +32,9 @@ namespace Vod2Tube.Application.Services
         public YouTubeAccountService(AppDbContext dbContext)
         {
             _dbContext = dbContext;
-            Directory.CreateDirectory(AccountsRootDir);
         }
 
         // ── CRUD ──────────────────────────────────────────────────────────────
-
         public async Task<List<YouTubeAccount>> GetAllAsync()
         {
             var accounts = await _dbContext.YouTubeAccounts.OrderBy(a => a.Name).ToListAsync();
