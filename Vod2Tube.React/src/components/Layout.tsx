@@ -46,7 +46,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
     return () => {
       cancelled = true;
-      clearTimeout(timer);
+      if (timer !== undefined) clearTimeout(timer);
     };
   }, []);
 
