@@ -24,6 +24,7 @@ builder.Services.AddTransient<AppDbContext>(sp =>
 builder.Services.AddOptions<AppSettings>();
 builder.Services.AddSingleton<IConfigureOptions<AppSettings>, AppSettingsConfigurator>();
 builder.Services.AddScoped<SettingsService>();
+builder.Services.AddSingleton<ExecutableReadinessMonitor>();
 
 builder.Services.AddScoped<ChannelService>();
 builder.Services.AddScoped<YouTubeAccountService>();
@@ -37,6 +38,7 @@ builder.Services.AddScoped<VideoUploader>();
 builder.Services.AddScoped<VodDownloader>();
 builder.Services.AddScoped<Archiver>();
 
+builder.Services.AddHostedService(sp => sp.GetRequiredService<ExecutableReadinessMonitor>());
 builder.Services.AddHostedService<VodPopulator>();
 builder.Services.AddHostedService<JobManager>();
 

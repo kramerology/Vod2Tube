@@ -1,4 +1,6 @@
+import { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
+import { settingsApi, type ExecutableReadinessStatus } from '../api/client';
 
 interface NavItem {
   to: string;
@@ -14,6 +16,35 @@ const NAV: NavItem[] = [
 ];
 
 export default function Layout({ children }: { children: React.ReactNode }) {
+  const [readiness, setReadiness] = useState<ExecutableReadinessStatus | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const load = async () => {
+      try {
+        const status = await settingsApi.getExecutableStatus();
+        if (!cancelled) {
+          setReadiness(status);
+        }
+      } catch {
+        if (!cancelled) {
+          setReadiness(null);
+        }
+      }
+    };
+
+    load();
+    const timer = window.setInterval(load, 15000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  const missingExecutables = readiness?.requiredExecutables.filter(x => !x.exists) ?? [];
+
   return (
     <div className="min-h-screen bg-surface text-on-surface antialiased selection:bg-primary/30 selection:text-primary">
       {/* ── Top Nav Bar ──────────────────────────────────────────── */}
@@ -108,6 +139,30 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
         {/* ── Main Content Canvas ──────────────────────────────── */}
         <main className="flex-1 md:ml-64 p-8 min-h-screen bg-surface">
+          {readiness && !readiness.isReady && (
+            <div className="mb-6 rounded-xl border border-amber-400/25 bg-amber-500/10 px-5 py-4 text-sm text-amber-100 shadow-[0_8px_30px_rgba(245,158,11,0.08)]">
+              <div className="flex items-start gap-3">
+                <span className="material-symbols-outlined mt-0.5 text-xl text-amber-300">warning</span>
+                <div className="flex-1">
+                  <h2 className="font-semibold text-amber-50">Required tools need attention</h2>
+                  <p className="mt-1 text-amber-100/90">
+                    {readiness.message} Automated jobs are temporarily paused until these paths point to valid executables.
+                  </p>
+                  <ul className="mt-3 space-y-1 text-amber-100/85">
+                    {missingExecutables.map(executable => (
+                      <li key={executable.settingName} className="flex flex-wrap items-baseline gap-2">
+                        <span className="font-medium text-amber-50">{executable.displayName}</span>
+                        <span className="font-mono text-xs break-all">{executable.path || 'Path not configured'}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-3 text-xs uppercase tracking-widest text-amber-200/70">
+                    Rechecked automatically every 15 seconds
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
           {children}
         </main>
       </div>
