@@ -105,6 +105,8 @@ namespace Vod2Tube.Application
 
         private async Task<bool> WaitForExecutableReadinessAsync(CancellationToken ct)
         {
+            string? lastLoggedMissingTools = null;
+
             while (!ct.IsCancellationRequested)
             {
                 var status = _executableReadinessMonitor.CurrentStatus;
@@ -117,9 +119,20 @@ namespace Vod2Tube.Application
                 if (status.IsReady)
                     return true;
 
-                _logger.LogWarning(
-                    "Job processing is paused because required executables are unavailable: {MissingTools}",
-                    string.Join(", ", status.RequiredExecutables.Where(x => !x.Exists).Select(x => x.DisplayName)));
+                var missingTools = string.Join(", ", status.RequiredExecutables.Where(x => !x.Exists).Select(x => x.DisplayName));
+                if (missingTools != lastLoggedMissingTools)
+                {
+                    _logger.LogWarning(
+                        "Job processing is paused because required executables are unavailable: {MissingTools}",
+                        missingTools);
+                    lastLoggedMissingTools = missingTools;
+                }
+                else
+                {
+                    _logger.LogDebug(
+                        "Still waiting for required executables: {MissingTools}",
+                        missingTools);
+                }
 
                 await Task.Delay(TimeSpan.FromSeconds(10), ct);
             }
