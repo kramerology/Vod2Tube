@@ -4,6 +4,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Vod2Tube.Application.Models;
 using Vod2Tube.Application.PipelineWorkers;
+using Vod2Tube.Application.Services;
 using Vod2Tube.Domain;
 using Vod2Tube.Infrastructure;
 
@@ -13,6 +14,7 @@ namespace Vod2Tube.Application
     {
         private readonly IServiceScopeFactory _scopeFactory;
         private readonly ILogger<JobManager> _logger;
+        private readonly ExecutableReadinessMonitor _executableReadinessMonitor;
 
         // Maximum number of total attempts before a transient failure is treated as permanent.
         internal const int MaxRetryAttempts = 3;
@@ -34,10 +36,14 @@ namespace Vod2Tube.Application
             "Archiving"
         ];
 
-        public JobManager(IServiceScopeFactory scopeFactory, ILogger<JobManager> logger)
+        public JobManager(
+            IServiceScopeFactory scopeFactory,
+            ILogger<JobManager> logger,
+            ExecutableReadinessMonitor executableReadinessMonitor)
         {
             _scopeFactory = scopeFactory;
             _logger = logger;
+            _executableReadinessMonitor = executableReadinessMonitor;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -47,6 +53,9 @@ namespace Vod2Tube.Application
             {
                 try
                 {
+                    if (!await WaitForExecutableReadinessAsync(stoppingToken))
+                        break;
+
                     await using var scope = _scopeFactory.CreateAsyncScope();
                     var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
@@ -67,6 +76,9 @@ namespace Vod2Tube.Application
                         _logger.LogInformation("Job {VodId} is paused; waiting for it to be unpaused", job.VodId);
                         while (!stoppingToken.IsCancellationRequested)
                         {
+                            if (!await WaitForExecutableReadinessAsync(stoppingToken))
+                                return;
+
                             await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
                             if (!await IsJobPausedAsync(dbContext, job.VodId, stoppingToken))
                             {
@@ -89,6 +101,30 @@ namespace Vod2Tube.Application
                 }
             }
             _logger.LogInformation("JobManager stopped");
+        }
+
+        private async Task<bool> WaitForExecutableReadinessAsync(CancellationToken ct)
+        {
+            while (!ct.IsCancellationRequested)
+            {
+                var status = _executableReadinessMonitor.CurrentStatus;
+                if (status.IsReady)
+                    return true;
+
+                if (status.CheckedAtUtc == DateTimeOffset.MinValue)
+                    status = await _executableReadinessMonitor.RefreshAsync(ct);
+
+                if (status.IsReady)
+                    return true;
+
+                _logger.LogWarning(
+                    "Job processing is paused because required executables are unavailable: {MissingTools}",
+                    string.Join(", ", status.RequiredExecutables.Where(x => !x.Exists).Select(x => x.DisplayName)));
+
+                await Task.Delay(TimeSpan.FromSeconds(10), ct);
+            }
+
+            return false;
         }
 
         internal static async Task<Pipeline?> FindHighestPriorityJobAsync(AppDbContext dbContext, CancellationToken ct)

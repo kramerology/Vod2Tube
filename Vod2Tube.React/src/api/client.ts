@@ -171,8 +171,23 @@ export interface AppSettings {
   archiveFinalVideoDir: string;
 }
 
+export interface ExecutableRequirementStatus {
+  settingName: string;
+  displayName: string;
+  path: string;
+  exists: boolean;
+}
+
+export interface ExecutableReadinessStatus {
+  isReady: boolean;
+  checkedAtUtc: string;
+  message: string;
+  requiredExecutables: ExecutableRequirementStatus[];
+}
+
 export const settingsApi = {
   get: () => request<AppSettings>('/settings'),
+  getExecutableStatus: () => request<ExecutableReadinessStatus>('/settings/executables'),
   save: (settings: AppSettings) =>
     request<AppSettings>('/settings', {
       method: 'PUT',
