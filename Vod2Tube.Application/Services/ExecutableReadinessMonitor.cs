@@ -42,7 +42,7 @@ public sealed class ExecutableReadinessMonitor : BackgroundService
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
         var settingsService = scope.ServiceProvider.GetRequiredService<SettingsService>();
-        var settings = await settingsService.GetSettingsAsync();
+        var settings = await settingsService.GetSettingsAsync(cancellationToken);
 
         var status = BuildStatus(settings);
         var previous = CurrentStatus;

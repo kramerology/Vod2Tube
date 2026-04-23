@@ -20,6 +20,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
 
     const load = async () => {
       try {
@@ -34,12 +35,18 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       }
     };
 
-    load();
-    const timer = window.setInterval(load, 15000);
+    const poll = async () => {
+      await load();
+      if (!cancelled) {
+        timer = setTimeout(poll, 15000);
+      }
+    };
+
+    poll();
 
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      clearTimeout(timer);
     };
   }, []);
 
