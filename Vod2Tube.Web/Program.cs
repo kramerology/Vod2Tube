@@ -45,7 +45,10 @@ builder.Services.AddScoped<VideoUploader>();
 builder.Services.AddScoped<VodDownloader>();
 builder.Services.AddScoped<YouTubeAccountService>();
 
+builder.Services.AddSingleton<ExecutableReadinessMonitor>();
+
 builder.Services.AddHostedService<VodPopulator>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<ExecutableReadinessMonitor>());
 builder.Services.AddHostedService<JobManager>();
 
 var app = builder.Build();

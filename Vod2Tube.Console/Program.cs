@@ -36,6 +36,8 @@ try
         .UseSerilog()
         .ConfigureServices((context, services) =>
         {
+            services.AddSingleton<ExecutableReadinessMonitor>();
+            services.AddHostedService(sp => sp.GetRequiredService<ExecutableReadinessMonitor>());
             services.AddHostedService<JobManager>();
 
             services.AddHostedService<VodPopulator>();
