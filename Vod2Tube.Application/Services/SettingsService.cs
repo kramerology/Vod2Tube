@@ -20,9 +20,9 @@ namespace Vod2Tube.Application.Services
         /// Returns the current settings.  Any key not present in the database
         /// will fall back to its <see cref="AppSettings"/> default value.
         /// </summary>
-        public async Task<AppSettings> GetSettingsAsync()
+        public async Task<AppSettings> GetSettingsAsync(CancellationToken cancellationToken = default)
         {
-            var rows = await _db.Settings.AsNoTracking().ToListAsync();
+            var rows = await _db.Settings.AsNoTracking().ToListAsync(cancellationToken);
             var dict = rows.ToDictionary(s => s.Key, s => s.Value);
             var settings = new AppSettings();
             AppSettings.ApplyDictionary(settings, dict);
