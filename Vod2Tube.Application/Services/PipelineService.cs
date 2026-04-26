@@ -231,7 +231,10 @@ namespace Vod2Tube.Application.Services
             }
 
             if (_twitchGraphQLService == null)
+            {
+                await _dbContext.SaveChangesAsync();
                 return false;
+            }
 
             HashSet<string> existingVodIds = await _dbContext.TwitchVods
                 .Where(v => v.ChannelName == channel.ChannelName)
