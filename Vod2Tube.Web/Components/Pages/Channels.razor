@@ -47,6 +47,12 @@
                 Size="Size.Small" Variant="Variant.Filled">
                 @(context.Active ? "Active" : "Paused")
             </MudChip>
+            @if (!string.IsNullOrWhiteSpace(context.CurrentVodId))
+            {
+                <MudText Typo="Typo.caption" Class="mud-text-secondary mt-1">
+                    Processing oldest queued VOD: @(context.CurrentVodTitle ?? context.CurrentVodId)
+                </MudText>
+            }
         </MudTd>
         <MudTd>
             <MudText Typo="Typo.body2" Class="mud-text-secondary">
@@ -111,7 +117,7 @@
 </MudDialog>
 
 @code {
-    private List<Channel> _channels = new();
+    private List<ChannelQueueStatusDto> _channels = new();
     private bool _loading = true;
     private bool _dialogVisible = false;
     private Channel? _editingChannel;
@@ -141,15 +147,18 @@
         _dialogVisible = true;
     }
 
-    private void OpenEditDialog(Channel channel)
+    private static Channel ToChannelEntity(ChannelQueueStatusDto channelStatus) => new Channel
     {
-        _editingChannel = new Channel
-        {
-            Id = channel.Id,
-            ChannelName = channel.ChannelName,
-            Active = channel.Active,
-            AddedAtUTC = channel.AddedAtUTC
-        };
+        Id = channelStatus.Id,
+        ChannelName = channelStatus.ChannelName,
+        Active = channelStatus.Active,
+        AddedAtUTC = channelStatus.AddedAtUTC,
+        YouTubeAccountId = channelStatus.YouTubeAccountId
+    };
+
+    private void OpenEditDialog(ChannelQueueStatusDto channelStatus)
+    {
+        _editingChannel = ToChannelEntity(channelStatus);
         _dialogVisible = true;
     }
 
@@ -178,25 +187,25 @@
         await LoadChannelsAsync();
     }
 
-    private async Task ToggleActiveAsync(Channel channel)
+    private async Task ToggleActiveAsync(ChannelQueueStatusDto channelStatus)
     {
-        channel.Active = !channel.Active;
-        await ChannelService.UpdateChannelAsync(channel);
-        Snackbar.Add($"Channel '{channel.ChannelName}' {(channel.Active ? "activated" : "paused")}.", Severity.Info);
+        channelStatus.Active = !channelStatus.Active;
+        await ChannelService.UpdateChannelAsync(ToChannelEntity(channelStatus));
+        Snackbar.Add($"Channel '{channelStatus.ChannelName}' {(channelStatus.Active ? "activated" : "paused")}.", Severity.Info);
         await LoadChannelsAsync();
     }
 
-    private async Task DeleteChannelAsync(Channel channel)
+    private async Task DeleteChannelAsync(ChannelQueueStatusDto channelStatus)
     {
         var confirmed = await DialogService.ShowMessageBox(
             "Delete Channel",
-            $"Are you sure you want to delete '{channel.ChannelName}'? This will not remove existing pipeline jobs.",
+            $"Are you sure you want to delete '{channelStatus.ChannelName}'? This will not remove existing pipeline jobs.",
             yesText: "Delete", cancelText: "Cancel");
 
         if (confirmed == true)
         {
-            await ChannelService.DeleteChannelAsync(channel.Id);
-            Snackbar.Add($"Channel '{channel.ChannelName}' deleted.", Severity.Warning);
+            await ChannelService.DeleteChannelAsync(channelStatus.Id);
+            Snackbar.Add($"Channel '{channelStatus.ChannelName}' deleted.", Severity.Warning);
             await LoadChannelsAsync();
         }
     }

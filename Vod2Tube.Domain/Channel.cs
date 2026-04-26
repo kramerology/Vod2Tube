@@ -8,6 +8,10 @@
 
         public DateTime AddedAtUTC { get; set; }
 
+        public DateTime? LastQueueCheckAtUTC { get; set; }
+
+        public string? LastQueuedVodId { get; set; }
+
         public bool Active { get; set; }
 
         /// <summary>

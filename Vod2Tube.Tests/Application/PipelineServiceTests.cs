@@ -462,4 +462,57 @@ public class PipelineServiceTests
         await Assert.That(active[0].Stage).IsEqualTo("Pending");
         await Assert.That(active[0].Failed).IsEqualTo(false);
     }
+
+    [Test]
+    public async Task QueueNextVodForChannelAsync_WithoutTwitchService_ReturnsFalse()
+    {
+        await using var ctx = CreateInMemoryContext(nameof(QueueNextVodForChannelAsync_WithoutTwitchService_ReturnsFalse));
+        ctx.Channels.Add(new Channel
+        {
+            Id = 1,
+            ChannelName = "alpha",
+            Active = true,
+            AddedAtUTC = DateTime.UtcNow,
+        });
+        await ctx.SaveChangesAsync();
+        var svc = new PipelineService(ctx, NullLogger<PipelineService>.Instance);
+
+        var result = await svc.QueueNextVodForChannelAsync(1);
+
+        await Assert.That(result).IsEqualTo(false);
+        var channel = await ctx.Channels.FindAsync(1);
+        await Assert.That(channel!.LastQueueCheckAtUTC).IsNotNull();
+        await Assert.That(await ctx.Pipelines.CountAsync()).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task QueueNextVodForChannelAsync_ChannelWithOutstandingJob_ReturnsFalse()
+    {
+        await using var ctx = CreateInMemoryContext(nameof(QueueNextVodForChannelAsync_ChannelWithOutstandingJob_ReturnsFalse));
+        ctx.Channels.Add(new Channel
+        {
+            Id = 1,
+            ChannelName = "alpha",
+            Active = true,
+            AddedAtUTC = DateTime.UtcNow,
+        });
+        ctx.TwitchVods.Add(new TwitchVod
+        {
+            Id = "vod-1",
+            ChannelName = "alpha",
+            Title = "Queued VOD",
+        });
+        ctx.Pipelines.Add(new Pipeline
+        {
+            VodId = "vod-1",
+            Stage = "Pending",
+        });
+        await ctx.SaveChangesAsync();
+        var svc = new PipelineService(ctx, NullLogger<PipelineService>.Instance);
+
+        var result = await svc.QueueNextVodForChannelAsync(1);
+
+        await Assert.That(result).IsEqualTo(false);
+        await Assert.That(await ctx.Pipelines.CountAsync()).IsEqualTo(1);
+    }
 }

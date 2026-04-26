@@ -1,5 +1,27 @@
 import { useEffect, useState } from 'react';
-import { channelsApi, accountsApi, type Channel, type YouTubeAccount } from '../api/client';
+import { channelsApi, accountsApi, type Channel, type ChannelQueueStatus, type YouTubeAccount } from '../api/client';
+
+function queueStateLabel(channel: ChannelQueueStatus): string {
+  if (!channel.active) return 'Paused';
+  if (channel.currentJobFailed) return `Needs attention${channel.currentStage ? ` · ${channel.currentStage}` : ''}`;
+  if (channel.currentJobPaused) return `Current VOD paused${channel.currentStage ? ` · ${channel.currentStage}` : ''}`;
+  if (channel.currentVodId) return `Processing oldest VOD${channel.currentStage ? ` · ${channel.currentStage}` : ''}`;
+  return 'Waiting to fetch oldest VOD';
+}
+
+function queueStateTone(channel: ChannelQueueStatus): string {
+  if (!channel.active) return 'text-on-surface-variant';
+  if (channel.currentJobFailed) return 'text-error';
+  if (channel.currentVodId) return 'text-primary';
+  return 'text-on-surface-variant';
+}
+
+function formatQueueCheck(iso: string | null): string {
+  if (!iso) return 'Never checked';
+  return `Checked ${new Date(iso).toLocaleString('en-US', {
+    month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+  })}`;
+}
 
 // ── Add / Edit dialog ─────────────────────────────────────────────────────────
 
@@ -117,13 +139,15 @@ function ChannelRow({
   accountName,
   onEdit,
   onToggle,
+  onQueueNext,
   onDelete,
 }: {
-  channel: Channel;
+  channel: ChannelQueueStatus;
   avatarUrl?: string;
   accountName?: string;
   onEdit: () => void;
   onToggle: () => void;
+  onQueueNext: () => void;
   onDelete: () => void;
 }) {
   const added = new Date(channel.addedAtUTC).toLocaleDateString('en-US', {
@@ -177,8 +201,24 @@ function ChannelRow({
           )}
         </div>
         <p className="text-sm text-on-surface-variant mb-1">
-          Automated VOD archival pipeline. Added {added}.
+          One VOD is fetched only when needed, oldest first. Added {added}.
         </p>
+        <p className={`text-xs mb-2 flex items-center gap-1 ${queueStateTone(channel)}`}>
+          <span className="material-symbols-outlined text-xs">hourglass_top</span>
+          {queueStateLabel(channel)}
+        </p>
+        {channel.currentVodId ? (
+          <p className="text-xs text-on-surface-variant/70 mb-2 flex items-center gap-1">
+            <span className="material-symbols-outlined text-xs">movie</span>
+            {channel.currentVodTitle || channel.currentVodId}
+          </p>
+        ) : channel.lastQueuedVodId ? (
+          <p className="text-xs text-on-surface-variant/70 mb-2 flex items-center gap-1">
+            <span className="material-symbols-outlined text-xs">history</span>
+            Last queued: {channel.lastQueuedVodId}
+          </p>
+        ) : null}
+        <p className="text-[11px] text-on-surface-variant/60 mb-2">{formatQueueCheck(channel.lastQueueCheckAtUTC)}</p>
         {accountName && (
           <p className="text-xs text-primary/80 mb-2 flex items-center gap-1">
             <span className="material-symbols-outlined text-xs">smart_display</span>
@@ -192,6 +232,13 @@ function ChannelRow({
           </p>
         )}
         <div className="flex items-center gap-4">
+          <button
+            onClick={onQueueNext}
+            disabled={!channel.active || channel.currentVodId !== null}
+            className="px-2.5 py-1 rounded-md text-xs font-bold text-primary hover:bg-primary/10 disabled:text-on-surface-variant/30 disabled:hover:bg-transparent transition-colors"
+          >
+            Fetch next VOD
+          </button>
           <button
             onClick={onEdit}
             className="p-1.5 text-on-surface-variant hover:text-on-surface hover:bg-white/5 rounded transition-colors"
@@ -229,13 +276,13 @@ function ChannelRow({
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function ChannelsPage() {
-  const [channels, setChannels] = useState<Channel[]>([]);
+  const [channels, setChannels] = useState<ChannelQueueStatus[]>([]);
   const [accounts, setAccounts] = useState<YouTubeAccount[]>([]);
   const [avatarUrls, setAvatarUrls] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [dialog, setDialog] = useState<Partial<Channel> | null>(null);
-  const [confirmDelete, setConfirmDelete] = useState<Channel | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<ChannelQueueStatus | null>(null);
 
   async function load() {
     try {
@@ -263,14 +310,20 @@ export default function ChannelsPage() {
     await load();
   }
 
-  async function handleToggle(channel: Channel) {
-    await channelsApi.update({ ...channel, active: !channel.active });
+  async function handleToggle(channel: ChannelQueueStatus) {
+    const { id, channelName, addedAtUTC, youTubeAccountId } = channel;
+    await channelsApi.update({ id, channelName, addedAtUTC, youTubeAccountId, active: !channel.active });
     await load();
   }
 
-  async function handleDelete(channel: Channel) {
+  async function handleDelete(channel: ChannelQueueStatus) {
     await channelsApi.delete(channel.id);
     setConfirmDelete(null);
+    await load();
+  }
+
+  async function handleQueueNext(channel: ChannelQueueStatus) {
+    await channelsApi.queueNext(channel.id);
     await load();
   }
 
@@ -283,7 +336,7 @@ export default function ChannelsPage() {
         <div>
           <h1 className="text-3xl font-black tracking-tight text-on-surface mb-2">Channel Matrix</h1>
           <p className="text-on-surface-variant max-w-md">
-            Orchestrate your broadcast distribution. Monitor ingestion and manage archival pipelines.
+            Each channel now fetches only one VOD at a time, always starting with the oldest unprocessed archive.
           </p>
         </div>
         <div className="flex gap-3">
@@ -328,6 +381,7 @@ export default function ChannelsPage() {
               accountName={accounts.find(a => a.id === c.youTubeAccountId)?.name}
               onEdit={() => setDialog({ ...c })}
               onToggle={() => handleToggle(c)}
+              onQueueNext={() => handleQueueNext(c)}
               onDelete={() => setConfirmDelete(c)}
             />
           ))}
@@ -360,10 +414,10 @@ export default function ChannelsPage() {
             <p className="text-3xl font-black text-on-surface">{channels.length - activeCount}</p>
           </div>
           <div className="bg-surface-container-low p-6 rounded-xl border border-white/5">
-            <p className="text-[10px] text-outline uppercase font-black tracking-widest mb-1">System Health</p>
+            <p className="text-[10px] text-outline uppercase font-black tracking-widest mb-1">Channels Waiting</p>
             <div className="flex items-center gap-2 mt-2">
-              <span className="text-3xl font-black text-emerald-400">99.9</span>
-              <span className="text-xs font-bold text-emerald-400/70">%</span>
+              <span className="text-3xl font-black text-on-surface">{channels.filter(c => c.active && !c.currentVodId).length}</span>
+              <span className="text-xs font-bold text-on-surface-variant/70">ready</span>
             </div>
           </div>
         </div>

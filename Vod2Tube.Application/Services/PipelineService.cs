@@ -4,13 +4,21 @@ using Vod2Tube.Application.Models;
 using Vod2Tube.Infrastructure;
 using DomainTwitchVod = Vod2Tube.Domain.TwitchVod;
 using DomainPipeline = Vod2Tube.Domain.Pipeline;
+using DomainChannel = Vod2Tube.Domain.Channel;
 
 namespace Vod2Tube.Application.Services
 {
     public class PipelineService
     {
+        private static readonly HashSet<string> TerminalStages = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "Uploaded",
+            "Cancelled"
+        };
+
         private readonly AppDbContext _dbContext;
         private readonly ILogger<PipelineService> _logger;
+        private readonly TwitchGraphQLService? _twitchGraphQLService;
 
         // Stages that represent an active (in-progress or queued) job
         private static readonly HashSet<string> ActiveStages = new(StringComparer.OrdinalIgnoreCase)
@@ -30,9 +38,15 @@ namespace Vod2Tube.Application.Services
         };
 
         public PipelineService(AppDbContext dbContext, ILogger<PipelineService> logger)
+            : this(dbContext, logger, null)
+        {
+        }
+
+        public PipelineService(AppDbContext dbContext, ILogger<PipelineService> logger, TwitchGraphQLService? twitchGraphQLService)
         {
             _dbContext = dbContext;
             _logger = logger;
+            _twitchGraphQLService = twitchGraphQLService;
         }
 
         public async Task<List<PipelineJobDto>> GetActiveJobsAsync()
@@ -136,6 +150,7 @@ namespace Vod2Tube.Application.Services
             job.FailReason = string.Empty;
             job.Description = string.Empty;
             await _dbContext.SaveChangesAsync();
+            await QueueNextVodForChannelAsync(vodId);
             _logger.LogInformation("Cancelled VOD {VodId}", vodId);
             return true;
         }
@@ -159,6 +174,101 @@ namespace Vod2Tube.Application.Services
             job.ResumableUploadUri = string.Empty;
             await _dbContext.SaveChangesAsync();
             _logger.LogInformation("Retried VOD {VodId} — reset to Pending", vodId);
+            return true;
+        }
+
+        public async Task QueueNextVodForChannelAsync(string vodId)
+        {
+            string? channelName = await _dbContext.TwitchVods
+                .Where(v => v.Id == vodId)
+                .Select(v => v.ChannelName)
+                .FirstOrDefaultAsync();
+
+            if (string.IsNullOrWhiteSpace(channelName))
+                return;
+
+            DomainChannel? channel = await _dbContext.Channels
+                .FirstOrDefaultAsync(c => c.ChannelName == channelName);
+
+            if (channel == null || !channel.Active)
+                return;
+
+            await QueueNextVodForChannelAsync(channel);
+        }
+
+        public async Task<bool> QueueNextVodForChannelAsync(int channelId)
+        {
+            DomainChannel? channel = await _dbContext.Channels.FindAsync(channelId);
+            if (channel == null)
+                return false;
+
+            return await QueueNextVodForChannelAsync(channel);
+        }
+
+        private async Task<bool> QueueNextVodForChannelAsync(DomainChannel channel)
+        {
+            channel.LastQueueCheckAtUTC = DateTime.UtcNow;
+
+            if (!channel.Active)
+            {
+                await _dbContext.SaveChangesAsync();
+                return false;
+            }
+
+            bool hasOutstandingJob = await _dbContext.Pipelines
+                .Where(p => !TerminalStages.Contains(p.Stage))
+                .Join(
+                    _dbContext.TwitchVods,
+                    pipeline => pipeline.VodId,
+                    vod => vod.Id,
+                    (pipeline, vod) => new { pipeline.Stage, vod.ChannelName })
+                .AnyAsync(x => x.ChannelName == channel.ChannelName);
+
+            if (hasOutstandingJob)
+            {
+                await _dbContext.SaveChangesAsync();
+                return false;
+            }
+
+            if (_twitchGraphQLService == null)
+            {
+                await _dbContext.SaveChangesAsync();
+                return false;
+            }
+
+            HashSet<string> existingVodIds = await _dbContext.TwitchVods
+                .Where(v => v.ChannelName == channel.ChannelName)
+                .Select(v => v.Id)
+                .ToHashSetAsync(StringComparer.Ordinal);
+
+            List<TwitchVod> vods = await _twitchGraphQLService.GetAllVodsAsync(channel.ChannelName);
+            TwitchVod? nextVod = VodPopulator.SelectNextVodToQueue(vods, existingVodIds);
+            if (nextVod == null)
+            {
+                await _dbContext.SaveChangesAsync();
+                return false;
+            }
+
+            _dbContext.TwitchVods.Add(new DomainTwitchVod
+            {
+                Id = nextVod.Id,
+                ChannelName = channel.ChannelName,
+                Title = nextVod.Title,
+                CreatedAtUTC = nextVod.PublishedAt,
+                Duration = TimeSpan.FromSeconds(nextVod.LengthSeconds),
+                Url = nextVod.Url,
+                AddedAtUTC = DateTime.UtcNow,
+            });
+
+            _dbContext.Pipelines.Add(new DomainPipeline
+            {
+                VodId = nextVod.Id,
+                Stage = "Pending",
+            });
+
+            channel.LastQueuedVodId = nextVod.Id;
+            await _dbContext.SaveChangesAsync();
+            _logger.LogInformation("Queued oldest unprocessed VOD {VodId} for channel {ChannelName}", nextVod.Id, channel.ChannelName);
             return true;
         }
 
