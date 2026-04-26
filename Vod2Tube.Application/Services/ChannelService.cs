@@ -37,6 +37,7 @@ namespace Vod2Tube.Application.Services
                         vod.ChannelName,
                         pipeline.VodId,
                         VodTitle = vod.Title,
+                        VodCreatedAtUTC = vod.CreatedAtUTC,
                         pipeline.Stage,
                         pipeline.Failed,
                         pipeline.Paused,
@@ -50,7 +51,7 @@ namespace Vod2Tube.Application.Services
                     group => group.Key,
                     group => group
                         .OrderByDescending(x => x.Failed)
-                        .ThenBy(x => x.VodId, StringComparer.Ordinal)
+                        .ThenBy(x => x.VodCreatedAtUTC)
                         .First(),
                     StringComparer.OrdinalIgnoreCase);
 

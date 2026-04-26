@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { channelsApi, accountsApi, type Channel, type YouTubeAccount } from '../api/client';
+import { channelsApi, accountsApi, type Channel, type ChannelQueueStatus, type YouTubeAccount } from '../api/client';
 
-function queueStateLabel(channel: Channel): string {
+function queueStateLabel(channel: ChannelQueueStatus): string {
   if (!channel.active) return 'Paused';
   if (channel.currentJobFailed) return `Needs attention${channel.currentStage ? ` · ${channel.currentStage}` : ''}`;
   if (channel.currentJobPaused) return `Current VOD paused${channel.currentStage ? ` · ${channel.currentStage}` : ''}`;
@@ -9,7 +9,7 @@ function queueStateLabel(channel: Channel): string {
   return 'Waiting to fetch oldest VOD';
 }
 
-function queueStateTone(channel: Channel): string {
+function queueStateTone(channel: ChannelQueueStatus): string {
   if (!channel.active) return 'text-on-surface-variant';
   if (channel.currentJobFailed) return 'text-error';
   if (channel.currentVodId) return 'text-primary';
@@ -142,7 +142,7 @@ function ChannelRow({
   onQueueNext,
   onDelete,
 }: {
-  channel: Channel;
+  channel: ChannelQueueStatus;
   avatarUrl?: string;
   accountName?: string;
   onEdit: () => void;
@@ -276,13 +276,13 @@ function ChannelRow({
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function ChannelsPage() {
-  const [channels, setChannels] = useState<Channel[]>([]);
+  const [channels, setChannels] = useState<ChannelQueueStatus[]>([]);
   const [accounts, setAccounts] = useState<YouTubeAccount[]>([]);
   const [avatarUrls, setAvatarUrls] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [dialog, setDialog] = useState<Partial<Channel> | null>(null);
-  const [confirmDelete, setConfirmDelete] = useState<Channel | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<ChannelQueueStatus | null>(null);
 
   async function load() {
     try {
@@ -310,18 +310,19 @@ export default function ChannelsPage() {
     await load();
   }
 
-  async function handleToggle(channel: Channel) {
-    await channelsApi.update({ ...channel, active: !channel.active });
+  async function handleToggle(channel: ChannelQueueStatus) {
+    const { id, channelName, addedAtUTC, youTubeAccountId } = channel;
+    await channelsApi.update({ id, channelName, addedAtUTC, youTubeAccountId, active: !channel.active });
     await load();
   }
 
-  async function handleDelete(channel: Channel) {
+  async function handleDelete(channel: ChannelQueueStatus) {
     await channelsApi.delete(channel.id);
     setConfirmDelete(null);
     await load();
   }
 
-  async function handleQueueNext(channel: Channel) {
+  async function handleQueueNext(channel: ChannelQueueStatus) {
     await channelsApi.queueNext(channel.id);
     await load();
   }

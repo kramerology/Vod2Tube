@@ -23,10 +23,13 @@ export interface Channel {
   id: number;
   channelName: string;
   addedAtUTC: string;
-  lastQueueCheckAtUTC: string | null;
-  lastQueuedVodId: string | null;
   active: boolean;
   youTubeAccountId: number | null;
+}
+
+export interface ChannelQueueStatus extends Channel {
+  lastQueueCheckAtUTC: string | null;
+  lastQueuedVodId: string | null;
   currentVodId: string | null;
   currentVodTitle: string | null;
   currentStage: string | null;
@@ -67,7 +70,7 @@ export interface PipelineJob {
 // ── Channel endpoints ─────────────────────────────────────────────────────────
 
 export const channelsApi = {
-  getAll: () => request<Channel[]>('/channels'),
+  getAll: () => request<ChannelQueueStatus[]>('/channels'),
 
   create: (channel: Pick<Channel, 'channelName' | 'active'> & { youTubeAccountId?: number | null }) =>
     request<Channel>('/channels', {
