@@ -55,6 +55,7 @@ public class JobManagerTests
         else
             svc.AddSingleton<VideoUploader>();
         svc.AddSingleton<Archiver>();
+        svc.AddSingleton<PipelineService>();
         return svc.BuildServiceProvider();
     }
 
@@ -867,6 +868,7 @@ public class JobManagerTests
             svc.AddSingleton<YouTubeAccountService>();
             svc.AddSingleton<VideoUploader>();
             svc.AddSingleton(new Archiver(archiveOptions, NullLogger<Archiver>.Instance));
+            svc.AddSingleton<PipelineService>();
             var provider = svc.BuildServiceProvider();
 
             await JobManager.ProcessJobToCompletionAsync(job, ctx, provider, NullLogger.Instance, CancellationToken.None);

@@ -47,6 +47,12 @@
                 Size="Size.Small" Variant="Variant.Filled">
                 @(context.Active ? "Active" : "Paused")
             </MudChip>
+            @if (!string.IsNullOrWhiteSpace(context.CurrentVodId))
+            {
+                <MudText Typo="Typo.caption" Class="mud-text-secondary mt-1">
+                    Processing oldest queued VOD: @(context.CurrentVodTitle ?? context.CurrentVodId)
+                </MudText>
+            }
         </MudTd>
         <MudTd>
             <MudText Typo="Typo.body2" Class="mud-text-secondary">

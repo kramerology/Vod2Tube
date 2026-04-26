@@ -23,8 +23,15 @@ export interface Channel {
   id: number;
   channelName: string;
   addedAtUTC: string;
+  lastQueueCheckAtUTC: string | null;
+  lastQueuedVodId: string | null;
   active: boolean;
   youTubeAccountId: number | null;
+  currentVodId: string | null;
+  currentVodTitle: string | null;
+  currentStage: string | null;
+  currentJobFailed: boolean;
+  currentJobPaused: boolean;
 }
 
 export interface PipelineJob {
@@ -73,6 +80,9 @@ export const channelsApi = {
       method: 'PUT',
       body: JSON.stringify(channel),
     }),
+
+  queueNext: (id: number) =>
+    request<void>(`/channels/${id}/queue-next`, { method: 'POST' }),
 
   delete: (id: number) =>
     request<void>(`/channels/${id}`, { method: 'DELETE' }),

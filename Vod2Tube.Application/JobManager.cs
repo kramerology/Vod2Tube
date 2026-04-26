@@ -280,6 +280,7 @@ namespace Vod2Tube.Application
             var finalRenderer  = services.GetRequiredService<FinalRenderer>();
             var videoUploader  = services.GetRequiredService<VideoUploader>();
             var archiver       = services.GetRequiredService<Archiver>();
+            var pipelineService = services.GetRequiredService<PipelineService>();
 
             logger.LogInformation("Processing job {VodId} from stage: {Stage}", job.VodId, job.Stage);
 
@@ -603,6 +604,7 @@ namespace Vod2Tube.Application
                     job.FinalVideoFilePath = string.Empty;
                     await dbContext.SaveChangesAsync(ct);
                     await SetStageAsync(dbContext, job, "Uploaded", ct);
+                    await pipelineService.QueueNextVodForChannelAsync(job.VodId);
                 }
 
                 logger.LogInformation("Job {VodId} completed", job.VodId);

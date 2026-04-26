@@ -13,6 +13,10 @@ public class ChannelsController(ChannelService channelSvc, TwitchGraphQLService 
     public async Task<IResult> GetAll()
         => Results.Ok(await channelSvc.GetAllChannelsAsync());
 
+    [HttpPost("{id:int}/queue-next")]
+    public async Task<IResult> QueueNext(int id, [FromServices] PipelineService pipelineSvc)
+        => await pipelineSvc.QueueNextVodForChannelAsync(id) ? Results.Ok() : Results.NoContent();
+
     [HttpPost]
     public async Task<IResult> Create(Channel channel)
     {

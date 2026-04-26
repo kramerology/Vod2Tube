@@ -33,6 +33,12 @@ namespace Vod2Tube.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<DateTime?>("LastQueueCheckAtUTC")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LastQueuedVodId")
+                        .HasColumnType("TEXT");
+
                     b.Property<int?>("YouTubeAccountId")
                         .HasColumnType("INTEGER");
 

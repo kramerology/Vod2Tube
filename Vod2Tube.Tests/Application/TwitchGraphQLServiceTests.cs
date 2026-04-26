@@ -135,4 +135,34 @@ public class TwitchGraphQLServiceTests
             await service.PopulateVodMomentsAsync(new List<TwitchVod>()))
             .ThrowsNothing();
     }
+
+    [Test]
+    public async Task SelectNextVodToQueue_ReturnsOldestUntrackedVod()
+    {
+        List<TwitchVod> vods =
+        [
+            new TwitchVod { Id = "newest", PublishedAt = new DateTime(2024, 3, 5, 0, 0, 0, DateTimeKind.Utc) },
+            new TwitchVod { Id = "oldest", PublishedAt = new DateTime(2024, 3, 1, 0, 0, 0, DateTimeKind.Utc) },
+            new TwitchVod { Id = "middle", PublishedAt = new DateTime(2024, 3, 3, 0, 0, 0, DateTimeKind.Utc) },
+        ];
+
+        var nextVod = VodPopulator.SelectNextVodToQueue(vods, new HashSet<string>(StringComparer.Ordinal) { "middle" });
+
+        await Assert.That(nextVod).IsNotNull();
+        await Assert.That(nextVod!.Id).IsEqualTo("oldest");
+    }
+
+    [Test]
+    public async Task SelectNextVodToQueue_ReturnsNullWhenEverythingIsTracked()
+    {
+        List<TwitchVod> vods =
+        [
+            new TwitchVod { Id = "v1", PublishedAt = new DateTime(2024, 3, 1, 0, 0, 0, DateTimeKind.Utc) },
+            new TwitchVod { Id = "v2", PublishedAt = new DateTime(2024, 3, 2, 0, 0, 0, DateTimeKind.Utc) },
+        ];
+
+        var nextVod = VodPopulator.SelectNextVodToQueue(vods, new HashSet<string>(StringComparer.Ordinal) { "v1", "v2" });
+
+        await Assert.That(nextVod).IsNull();
+    }
 }

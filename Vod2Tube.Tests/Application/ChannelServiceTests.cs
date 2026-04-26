@@ -311,4 +311,77 @@ public class ChannelServiceTests
         var secondDelete = await service.DeleteChannelAsync(channel.Id);
         await Assert.That(secondDelete).IsFalse();
     }
+
+    [Test]
+    public async Task GetAllChannelsAsync_MapsCurrentOutstandingJobStatus()
+    {
+        await using var ctx = CreateInMemoryContext(nameof(GetAllChannelsAsync_MapsCurrentOutstandingJobStatus));
+        ctx.Channels.Add(new Channel
+        {
+            ChannelName = "alpha",
+            Active = true,
+            AddedAtUTC = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            LastQueueCheckAtUTC = new DateTime(2024, 1, 2, 0, 0, 0, DateTimeKind.Utc),
+            LastQueuedVodId = "vod-1",
+        });
+        ctx.TwitchVods.Add(new TwitchVod
+        {
+            Id = "vod-1",
+            ChannelName = "alpha",
+            Title = "Oldest stream",
+        });
+        ctx.Pipelines.Add(new Pipeline
+        {
+            VodId = "vod-1",
+            Stage = "PendingDownloadChat",
+            Failed = true,
+            Paused = true,
+        });
+        await ctx.SaveChangesAsync();
+
+        var service = new ChannelService(ctx);
+
+        var result = await service.GetAllChannelsAsync();
+
+        await Assert.That(result).Count().IsEqualTo(1);
+        await Assert.That(result[0].CurrentVodId).IsEqualTo("vod-1");
+        await Assert.That(result[0].CurrentVodTitle).IsEqualTo("Oldest stream");
+        await Assert.That(result[0].CurrentStage).IsEqualTo("PendingDownloadChat");
+        await Assert.That(result[0].CurrentJobFailed).IsEqualTo(true);
+        await Assert.That(result[0].CurrentJobPaused).IsEqualTo(true);
+        await Assert.That(result[0].LastQueuedVodId).IsEqualTo("vod-1");
+    }
+
+    [Test]
+    public async Task GetAllChannelsAsync_IgnoresTerminalJobsWhenBuildingCurrentStatus()
+    {
+        await using var ctx = CreateInMemoryContext(nameof(GetAllChannelsAsync_IgnoresTerminalJobsWhenBuildingCurrentStatus));
+        ctx.Channels.Add(new Channel
+        {
+            ChannelName = "alpha",
+            Active = true,
+            AddedAtUTC = DateTime.UtcNow,
+            LastQueuedVodId = "vod-finished",
+        });
+        ctx.TwitchVods.Add(new TwitchVod
+        {
+            Id = "vod-finished",
+            ChannelName = "alpha",
+            Title = "Finished stream",
+        });
+        ctx.Pipelines.Add(new Pipeline
+        {
+            VodId = "vod-finished",
+            Stage = "Uploaded",
+        });
+        await ctx.SaveChangesAsync();
+
+        var service = new ChannelService(ctx);
+
+        var result = await service.GetAllChannelsAsync();
+
+        await Assert.That(result[0].CurrentVodId).IsNull();
+        await Assert.That(result[0].CurrentStage).IsNull();
+        await Assert.That(result[0].LastQueuedVodId).IsEqualTo("vod-finished");
+    }
 }

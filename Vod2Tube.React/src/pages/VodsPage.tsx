@@ -260,7 +260,7 @@ export default function VodsPage() {
         <div className="flex justify-between items-end">
           <div>
             <h1 className="text-3xl font-bold tracking-tight text-on-surface mb-1">Queue Manager</h1>
-            <p className="text-on-surface-variant text-sm">Active transcoding jobs and distribution pipeline.</p>
+            <p className="text-on-surface-variant text-sm">One VOD per channel is fetched only when needed, with the oldest unprocessed archive queued first.</p>
           </div>
         </div>
 
@@ -352,7 +352,7 @@ export default function VodsPage() {
           <span className="material-symbols-outlined text-5xl text-on-surface-variant/30">video_library</span>
           <p className="text-on-surface text-lg font-bold">No VODs match this filter</p>
           <p className="text-on-surface-variant text-sm">
-            {filter === 'all' ? 'No jobs in the queue yet.' : 'Try selecting a different filter above.'}
+            {filter === 'all' ? 'No on-demand VOD jobs have been queued yet.' : 'Try selecting a different filter above.'}
           </p>
         </div>
       )}
@@ -367,7 +367,7 @@ export default function VodsPage() {
             </div>
           </div>
           <div className="col-span-1 bg-surface-container border border-white/5 rounded-xl p-4 flex flex-col justify-between">
-            <span className="text-[10px] font-bold text-on-surface-variant uppercase">Pending</span>
+            <span className="text-[10px] font-bold text-on-surface-variant uppercase">Queued Next</span>
             <div className="mt-2">
               <span className="text-xl font-bold text-on-surface">{counts.pending}</span>
               <p className="text-[10px] text-on-surface-variant mt-1">{counts.paused} paused</p>

@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Vod2Tube.Application.Models;
 using Vod2Tube.Domain;
 using Vod2Tube.Infrastructure;
 
@@ -13,9 +14,65 @@ namespace Vod2Tube.Application.Services
             _dbContext = dbContext;
         }
 
-        public async Task<List<Channel>> GetAllChannelsAsync()
+        public async Task<List<ChannelQueueStatusDto>> GetAllChannelsAsync()
         {
-            return await _dbContext.Channels.OrderBy(c => c.ChannelName).ToListAsync();
+            var channels = await _dbContext.Channels
+                .AsNoTracking()
+                .OrderBy(c => c.ChannelName)
+                .ToListAsync();
+
+            var activeChannelNames = channels
+                .Select(c => c.ChannelName)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            var outstandingJobs = await _dbContext.Pipelines
+                .AsNoTracking()
+                .Where(p => p.Stage != "Uploaded" && p.Stage != "Cancelled")
+                .Join(
+                    _dbContext.TwitchVods.AsNoTracking(),
+                    pipeline => pipeline.VodId,
+                    vod => vod.Id,
+                    (pipeline, vod) => new
+                    {
+                        vod.ChannelName,
+                        pipeline.VodId,
+                        VodTitle = vod.Title,
+                        pipeline.Stage,
+                        pipeline.Failed,
+                        pipeline.Paused,
+                    })
+                .Where(x => activeChannelNames.Contains(x.ChannelName))
+                .ToListAsync();
+
+            var currentJobsByChannel = outstandingJobs
+                .GroupBy(x => x.ChannelName, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(
+                    group => group.Key,
+                    group => group
+                        .OrderByDescending(x => x.Failed)
+                        .ThenBy(x => x.VodId, StringComparer.Ordinal)
+                        .First(),
+                    StringComparer.OrdinalIgnoreCase);
+
+            return channels.Select(channel =>
+            {
+                var currentJob = currentJobsByChannel.GetValueOrDefault(channel.ChannelName);
+                return new ChannelQueueStatusDto
+                {
+                    Id = channel.Id,
+                    ChannelName = channel.ChannelName,
+                    AddedAtUTC = channel.AddedAtUTC,
+                    LastQueueCheckAtUTC = channel.LastQueueCheckAtUTC,
+                    LastQueuedVodId = channel.LastQueuedVodId,
+                    Active = channel.Active,
+                    YouTubeAccountId = channel.YouTubeAccountId,
+                    CurrentVodId = currentJob?.VodId,
+                    CurrentVodTitle = currentJob?.VodTitle,
+                    CurrentStage = currentJob?.Stage,
+                    CurrentJobFailed = currentJob?.Failed ?? false,
+                    CurrentJobPaused = currentJob?.Paused ?? false,
+                };
+            }).ToList();
         }
 
         public async Task<Channel> AddNewChannelAsync(Channel channel)

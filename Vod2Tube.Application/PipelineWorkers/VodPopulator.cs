@@ -2,18 +2,22 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using Vod2Tube.Infrastructure;
 
 namespace Vod2Tube.Application
 {
     public class VodPopulator : BackgroundService
     {
+        private static readonly string[] TerminalStages = ["Uploaded", "Cancelled"];
+
+        internal static TwitchVod? SelectNextVodToQueue(IEnumerable<TwitchVod> vods, ISet<string> existingVodIds)
+        {
+            return vods
+                .Where(v => !existingVodIds.Contains(v.Id))
+                .OrderBy(v => v.PublishedAt)
+                .FirstOrDefault();
+        }
+
         private readonly IServiceScopeFactory _scopeFactory;
         private readonly ILogger<VodPopulator> _logger;
 
@@ -35,57 +39,71 @@ namespace Vod2Tube.Application
 
                     await dbContext.Database.MigrateAsync(stoppingToken);
 
-                    List<string> channelNames = await dbContext.Channels
+                    List<Domain.Channel> channels = await dbContext.Channels
                         .Where(c => c.Active)
-                        .Select(c => c.ChannelName)
-                        .Distinct()
+                        .OrderBy(c => c.ChannelName)
                         .ToListAsync(stoppingToken);
 
-                    if (channelNames.Count == 0)
+                    if (channels.Count == 0)
                     {
                         _logger.LogWarning("No active channels found in database. Waiting 5 minutes before checking again.");
                         continue;
                     }
 
-                    _logger.LogInformation("Processing {Count} active channel(s)", channelNames.Count);
+                    _logger.LogInformation("Checking {Count} active channel(s) for the next VOD to queue", channels.Count);
 
-                    foreach (string channel in channelNames)
+                    foreach (Domain.Channel channel in channels)
                     {
-                        List<TwitchVod> vods = await twitchService.GetAllVodsAsync(channel);
+                        channel.LastQueueCheckAtUTC = DateTime.UtcNow;
+
+                        bool hasOutstandingJob = await dbContext.Pipelines
+                            .Where(p => !TerminalStages.Contains(p.Stage))
+                            .Join(
+                                dbContext.TwitchVods,
+                                pipeline => pipeline.VodId,
+                                vod => vod.Id,
+                                (pipeline, vod) => new { pipeline.Stage, vod.ChannelName })
+                            .AnyAsync(x => x.ChannelName == channel.ChannelName, stoppingToken);
+
+                        if (hasOutstandingJob)
+                        {
+                            _logger.LogDebug("Channel {ChannelName} already has an outstanding job; skipping queue population", channel.ChannelName);
+                            continue;
+                        }
 
                         List<string> existingVodIds = await dbContext.TwitchVods
-                            .Where(v => v.ChannelName == channel)
+                            .Where(v => v.ChannelName == channel.ChannelName)
                             .Select(v => v.Id)
                             .ToListAsync(stoppingToken);
 
+                        List<TwitchVod> vods = await twitchService.GetAllVodsAsync(channel.ChannelName);
+                        TwitchVod? nextVod = SelectNextVodToQueue(vods, existingVodIds.ToHashSet(StringComparer.Ordinal));
 
-                        List<TwitchVod> newVods = vods.Where(v => !existingVodIds.Contains(v.Id))
-                                                      .OrderBy(v => v.PublishedAt)
-                                                      .ToList();
-
-                        foreach (TwitchVod vod in newVods)
+                        if (nextVod == null)
                         {
-                            dbContext.TwitchVods.Add(new Domain.TwitchVod
-                            {
-                                Id = vod.Id,
-                                ChannelName = channel,
-                                Title = vod.Title,
-                                CreatedAtUTC = vod.PublishedAt,
-                                Duration = TimeSpan.FromSeconds(vod.LengthSeconds),
-                                Url = vod.Url,
-                                AddedAtUTC = DateTime.UtcNow
-                            });
-
-
-                            dbContext.Pipelines.Add(new Domain.Pipeline
-                            {
-                                VodId = vod.Id,
-                                Stage = "Pending",
-
-                            });
+                            _logger.LogDebug("No new VODs found to queue for channel {ChannelName}", channel.ChannelName);
+                            continue;
                         }
 
+                        dbContext.TwitchVods.Add(new Domain.TwitchVod
+                        {
+                            Id = nextVod.Id,
+                            ChannelName = channel.ChannelName,
+                            Title = nextVod.Title,
+                            CreatedAtUTC = nextVod.PublishedAt,
+                            Duration = TimeSpan.FromSeconds(nextVod.LengthSeconds),
+                            Url = nextVod.Url,
+                            AddedAtUTC = DateTime.UtcNow
+                        });
 
+                        dbContext.Pipelines.Add(new Domain.Pipeline
+                        {
+                            VodId = nextVod.Id,
+                            Stage = "Pending",
+                        });
+
+                        channel.LastQueuedVodId = nextVod.Id;
+                        _logger.LogInformation("Queued oldest unprocessed VOD {VodId} for channel {ChannelName}", nextVod.Id, channel.ChannelName);
                     }
 
                     await dbContext.SaveChangesAsync(stoppingToken);
