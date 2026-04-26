@@ -147,15 +147,18 @@
         _dialogVisible = true;
     }
 
+    private static Channel ToChannelEntity(ChannelQueueStatusDto channelStatus) => new Channel
+    {
+        Id = channelStatus.Id,
+        ChannelName = channelStatus.ChannelName,
+        Active = channelStatus.Active,
+        AddedAtUTC = channelStatus.AddedAtUTC,
+        YouTubeAccountId = channelStatus.YouTubeAccountId
+    };
+
     private void OpenEditDialog(ChannelQueueStatusDto channelStatus)
     {
-        _editingChannel = new Channel
-        {
-            Id = channelStatus.Id,
-            ChannelName = channelStatus.ChannelName,
-            Active = channelStatus.Active,
-            AddedAtUTC = channelStatus.AddedAtUTC
-        };
+        _editingChannel = ToChannelEntity(channelStatus);
         _dialogVisible = true;
     }
 
@@ -187,15 +190,7 @@
     private async Task ToggleActiveAsync(ChannelQueueStatusDto channelStatus)
     {
         channelStatus.Active = !channelStatus.Active;
-        var channel = new Channel
-        {
-            Id = channelStatus.Id,
-            ChannelName = channelStatus.ChannelName,
-            Active = channelStatus.Active,
-            AddedAtUTC = channelStatus.AddedAtUTC,
-            YouTubeAccountId = channelStatus.YouTubeAccountId
-        };
-        await ChannelService.UpdateChannelAsync(channel);
+        await ChannelService.UpdateChannelAsync(ToChannelEntity(channelStatus));
         Snackbar.Add($"Channel '{channelStatus.ChannelName}' {(channelStatus.Active ? "activated" : "paused")}.", Severity.Info);
         await LoadChannelsAsync();
     }
