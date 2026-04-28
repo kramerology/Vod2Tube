@@ -384,4 +384,120 @@ public class ChannelServiceTests
         await Assert.That(result[0].CurrentStage).IsNull();
         await Assert.That(result[0].LastQueuedVodId).IsEqualTo("vod-finished");
     }
+
+    // =========================================================================
+    // GetAllChannelsAsync – per-channel pipeline stats
+    // =========================================================================
+
+    /// <summary>
+    /// A channel that has no associated pipelines should report zero counts and
+    /// a null <see cref="ChannelQueueStatusDto.LastUploadedAtUTC"/>.
+    /// </summary>
+    [Test]
+    public async Task GetAllChannelsAsync_Stats_NoPipelines_HasZeroCountsAndNullLastUpload()
+    {
+        await using var ctx = CreateInMemoryContext(nameof(GetAllChannelsAsync_Stats_NoPipelines_HasZeroCountsAndNullLastUpload));
+        ctx.Channels.Add(new Channel { ChannelName = "empty", Active = true, AddedAtUTC = DateTime.UtcNow });
+        await ctx.SaveChangesAsync();
+
+        var service = new ChannelService(ctx);
+        var result = await service.GetAllChannelsAsync();
+
+        await Assert.That(result[0].TotalVodsDownloaded).IsEqualTo(0);
+        await Assert.That(result[0].TotalVodsUploaded).IsEqualTo(0);
+        await Assert.That(result[0].LastUploadedAtUTC).IsNull();
+    }
+
+    /// <summary>
+    /// A pipeline with <c>Stage = "Uploaded"</c> and a non-null
+    /// <see cref="Pipeline.UploadedAtUTC"/> should be counted in
+    /// <see cref="ChannelQueueStatusDto.TotalVodsUploaded"/> and reflected in
+    /// <see cref="ChannelQueueStatusDto.LastUploadedAtUTC"/>.
+    /// </summary>
+    [Test]
+    public async Task GetAllChannelsAsync_Stats_UploadedWithTimestamp_CountedInTotalUploaded()
+    {
+        var uploadedAt = new DateTime(2024, 6, 1, 12, 0, 0, DateTimeKind.Utc);
+        await using var ctx = CreateInMemoryContext(nameof(GetAllChannelsAsync_Stats_UploadedWithTimestamp_CountedInTotalUploaded));
+        ctx.Channels.Add(new Channel { ChannelName = "uploader", Active = true, AddedAtUTC = DateTime.UtcNow });
+        ctx.TwitchVods.Add(new TwitchVod { Id = "vod-up", ChannelName = "uploader", Title = "Uploaded VOD" });
+        ctx.Pipelines.Add(new Pipeline { VodId = "vod-up", Stage = "Uploaded", UploadedAtUTC = uploadedAt });
+        await ctx.SaveChangesAsync();
+
+        var service = new ChannelService(ctx);
+        var result = await service.GetAllChannelsAsync();
+
+        await Assert.That(result[0].TotalVodsUploaded).IsEqualTo(1);
+        await Assert.That(result[0].LastUploadedAtUTC).IsEqualTo(uploadedAt);
+    }
+
+    /// <summary>
+    /// A pipeline with <c>Stage = "Uploaded"</c> but a <c>null</c>
+    /// <see cref="Pipeline.UploadedAtUTC"/> should NOT be counted in
+    /// <see cref="ChannelQueueStatusDto.TotalVodsUploaded"/> and
+    /// <see cref="ChannelQueueStatusDto.LastUploadedAtUTC"/> should remain null.
+    /// </summary>
+    [Test]
+    public async Task GetAllChannelsAsync_Stats_UploadedWithNullTimestamp_NotCountedInTotalUploaded()
+    {
+        await using var ctx = CreateInMemoryContext(nameof(GetAllChannelsAsync_Stats_UploadedWithNullTimestamp_NotCountedInTotalUploaded));
+        ctx.Channels.Add(new Channel { ChannelName = "nots", Active = true, AddedAtUTC = DateTime.UtcNow });
+        ctx.TwitchVods.Add(new TwitchVod { Id = "vod-nots", ChannelName = "nots", Title = "No timestamp VOD" });
+        ctx.Pipelines.Add(new Pipeline { VodId = "vod-nots", Stage = "Uploaded", UploadedAtUTC = null });
+        await ctx.SaveChangesAsync();
+
+        var service = new ChannelService(ctx);
+        var result = await service.GetAllChannelsAsync();
+
+        await Assert.That(result[0].TotalVodsUploaded).IsEqualTo(0);
+        await Assert.That(result[0].LastUploadedAtUTC).IsNull();
+    }
+
+    /// <summary>
+    /// When multiple pipelines are uploaded, <see cref="ChannelQueueStatusDto.LastUploadedAtUTC"/>
+    /// should be the latest (maximum) <see cref="Pipeline.UploadedAtUTC"/> value.
+    /// </summary>
+    [Test]
+    public async Task GetAllChannelsAsync_Stats_LastUploadedAtUTC_ReturnsLatestTimestamp()
+    {
+        var older = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var newer = new DateTime(2024, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+        await using var ctx = CreateInMemoryContext(nameof(GetAllChannelsAsync_Stats_LastUploadedAtUTC_ReturnsLatestTimestamp));
+        ctx.Channels.Add(new Channel { ChannelName = "multi", Active = true, AddedAtUTC = DateTime.UtcNow });
+        ctx.TwitchVods.Add(new TwitchVod { Id = "vod-a", ChannelName = "multi", Title = "Older VOD" });
+        ctx.TwitchVods.Add(new TwitchVod { Id = "vod-b", ChannelName = "multi", Title = "Newer VOD" });
+        ctx.Pipelines.Add(new Pipeline { VodId = "vod-a", Stage = "Uploaded", UploadedAtUTC = older });
+        ctx.Pipelines.Add(new Pipeline { VodId = "vod-b", Stage = "Uploaded", UploadedAtUTC = newer });
+        await ctx.SaveChangesAsync();
+
+        var service = new ChannelService(ctx);
+        var result = await service.GetAllChannelsAsync();
+
+        await Assert.That(result[0].TotalVodsUploaded).IsEqualTo(2);
+        await Assert.That(result[0].LastUploadedAtUTC).IsEqualTo(newer);
+    }
+
+    /// <summary>
+    /// Pipelines in stages that follow a successful VOD download (e.g.,
+    /// <c>PendingDownloadChat</c>) should be counted in
+    /// <see cref="ChannelQueueStatusDto.TotalVodsDownloaded"/>.
+    /// </summary>
+    [Test]
+    public async Task GetAllChannelsAsync_Stats_DownloadedStages_CountedInTotalDownloaded()
+    {
+        await using var ctx = CreateInMemoryContext(nameof(GetAllChannelsAsync_Stats_DownloadedStages_CountedInTotalDownloaded));
+        ctx.Channels.Add(new Channel { ChannelName = "dlchan", Active = true, AddedAtUTC = DateTime.UtcNow });
+        ctx.TwitchVods.Add(new TwitchVod { Id = "vod-dl1", ChannelName = "dlchan", Title = "In chat download" });
+        ctx.TwitchVods.Add(new TwitchVod { Id = "vod-dl2", ChannelName = "dlchan", Title = "Uploading" });
+        ctx.TwitchVods.Add(new TwitchVod { Id = "vod-dl3", ChannelName = "dlchan", Title = "Already uploaded" });
+        ctx.Pipelines.Add(new Pipeline { VodId = "vod-dl1", Stage = "PendingDownloadChat" });
+        ctx.Pipelines.Add(new Pipeline { VodId = "vod-dl2", Stage = "Uploading" });
+        ctx.Pipelines.Add(new Pipeline { VodId = "vod-dl3", Stage = "Uploaded", UploadedAtUTC = DateTime.UtcNow });
+        await ctx.SaveChangesAsync();
+
+        var service = new ChannelService(ctx);
+        var result = await service.GetAllChannelsAsync();
+
+        await Assert.That(result[0].TotalVodsDownloaded).IsEqualTo(3);
+    }
 }
