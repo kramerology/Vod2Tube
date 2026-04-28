@@ -23,6 +23,9 @@ function formatRelativeTime(iso: string | null): string {
   if (Number.isNaN(then)) return 'No uploads yet';
 
   const diffMs = Date.now() - then;
+
+  if (diffMs < 0) return 'just now';
+
   const minute = 60 * 1000;
   const hour = 60 * minute;
   const day = 24 * hour;
