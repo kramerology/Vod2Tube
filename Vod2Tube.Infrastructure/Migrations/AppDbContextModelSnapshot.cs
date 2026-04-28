@@ -105,6 +105,9 @@ namespace Vod2Tube.Infrastructure.Migrations
                     b.Property<double?>("PercentComplete")
                         .HasColumnType("REAL");
 
+                    b.Property<DateTime?>("UploadedAtUTC")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("ResumableUploadUri")
                         .IsRequired()
                         .HasColumnType("TEXT");

@@ -25,5 +25,11 @@ namespace Vod2Tube.Application.Models
         public bool CurrentJobFailed { get; set; }
 
         public bool CurrentJobPaused { get; set; }
+
+        public int TotalVodsDownloaded { get; set; }
+
+        public int TotalVodsUploaded { get; set; }
+
+        public DateTime? LastUploadedAtUTC { get; set; }
     }
 }

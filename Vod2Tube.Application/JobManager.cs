@@ -604,6 +604,9 @@ namespace Vod2Tube.Application
                     job.FinalVideoFilePath = string.Empty;
                     await dbContext.SaveChangesAsync(ct);
                     await SetStageAsync(dbContext, job, "Uploaded", ct);
+                    if (!string.IsNullOrWhiteSpace(job.YoutubeVideoId))
+                        job.UploadedAtUTC ??= DateTime.UtcNow;
+                    await dbContext.SaveChangesAsync(ct);
                     await pipelineService.QueueNextVodForChannelAsync(job.VodId);
                 }
 

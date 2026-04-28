@@ -16,6 +16,8 @@ namespace Vod2Tube.Domain
         public string YoutubeVideoId { get; set; } = string.Empty;
         public string ResumableUploadUri { get; set; } = string.Empty;
 
+        public DateTime? UploadedAtUTC { get; set; }
+
         public bool Failed { get; set; } = false;
         public string FailReason { get; set; } = string.Empty;
         public int FailCount { get; set; } = 0;

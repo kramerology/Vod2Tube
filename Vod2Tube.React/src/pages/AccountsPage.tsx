@@ -7,23 +7,22 @@ function SetupWizard({
   onSave,
   onClose,
 }: {
-  onSave: (name: string, json: string) => Promise<void>;
+  onSave: (json: string) => Promise<void>;
   onClose: () => void;
 }) {
   const [step, setStep] = useState(1);
-  const [name, setName] = useState('');
   const [json, setJson] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  const totalSteps = 4;
+  const totalSteps = 3;
 
   async function handleSave() {
-    if (!name.trim() || !json.trim()) return;
+    if (!json.trim()) return;
     setSaving(true);
     setError('');
     try {
-      await onSave(name.trim(), json.trim());
+      await onSave(json.trim());
     } catch (e) {
       setError((e as Error).message);
       setSaving(false);
@@ -52,32 +51,8 @@ function SetupWizard({
           </div>
         </div>
 
-        {/* Step 1: Name */}
+        {/* Step 1: Google Cloud Console instructions */}
         {step === 1 && (
-          <div className="space-y-4">
-            <div className="bg-surface-container-low rounded-lg p-4 border border-white/5">
-              <h3 className="text-sm font-bold text-on-surface mb-2 flex items-center gap-2">
-                <span className="material-symbols-outlined text-primary text-lg">badge</span>
-                Give this account a name
-              </h3>
-              <p className="text-xs text-on-surface-variant mb-4">
-                Choose a friendly name so you can easily identify this YouTube account later.
-                For example: "Gaming Channel" or "Highlights Account".
-              </p>
-              <input
-                className="w-full bg-surface-container-highest border border-outline-variant/20 rounded-lg py-3 px-4 text-on-surface focus:outline-none focus:ring-1 focus:ring-primary/50 transition-all placeholder:text-on-surface-variant/50"
-                placeholder='e.g. "My Gaming Channel"'
-                value={name}
-                onChange={e => setName(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && name.trim() && setStep(2)}
-                autoFocus
-              />
-            </div>
-          </div>
-        )}
-
-        {/* Step 2: Google Cloud Console instructions */}
-        {step === 2 && (
           <div className="space-y-4">
             <div className="bg-surface-container-low rounded-lg p-4 border border-white/5">
               <h3 className="text-sm font-bold text-on-surface mb-3 flex items-center gap-2">
@@ -85,7 +60,7 @@ function SetupWizard({
                 Set up Google Cloud credentials
               </h3>
               <p className="text-xs text-on-surface-variant mb-4">
-                Follow these steps in the Google Cloud Console. Don't worry — it's free and only takes a few minutes!
+                Follow these steps in the Google Cloud Console. After you authorize with YouTube, Vod2Tube will use the actual channel name automatically.
               </p>
 
               <ol className="space-y-3 text-sm text-on-surface-variant">
@@ -103,7 +78,9 @@ function SetupWizard({
                 <li className="flex gap-3">
                   <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center">2</span>
                   <div>
-                    <span className="text-on-surface font-medium">Create a new project</span> (or select an existing one)
+                    <span className="text-on-surface font-medium">Create a new project</span>
+                    <br />
+                    <span className="text-xs">Or select an existing one from the project dropdown</span>
                   </div>
                 </li>
                 <li className="flex gap-3">
@@ -111,7 +88,7 @@ function SetupWizard({
                   <div>
                     <span className="text-on-surface font-medium">Enable the YouTube Data API v3</span>
                     <br />
-                    <span className="text-xs">Go to "APIs & Services" → "Library" → search "YouTube Data API v3" → Enable</span>
+                    <span className="text-xs">Go to "APIs & Services" → "Library" → search "YouTube Data API v3" → click "Enable"</span>
                   </div>
                 </li>
                 <li className="flex gap-3">
@@ -119,25 +96,33 @@ function SetupWizard({
                   <div>
                     <span className="text-on-surface font-medium">Configure the OAuth consent screen</span>
                     <br />
-                    <span className="text-xs">Go to "APIs & Services" → "OAuth consent screen" → choose "External" → fill in the app name</span>
+                    <span className="text-xs">Go to "APIs & Services" → "OAuth consent screen" → select "Overview" → select "Get Started" → fill in the app name → select "External" → fill out the rest</span>
                   </div>
                 </li>
                 <li className="flex gap-3">
                   <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center">5</span>
                   <div>
-                    <span className="text-on-surface font-medium">Create OAuth 2.0 credentials</span>
+                    <span className="text-on-surface font-medium">Publish the app</span>
                     <br />
-                    <span className="text-xs">
-                      Go to "APIs & Services" → "Credentials" → "Create Credentials" → "OAuth client ID" → choose <strong className="text-on-surface">"Desktop app"</strong>
-                    </span>
+                    <span className="text-xs">Go to "APIs & Services" → "OAuth consent screen" → "Audience" → click "Publish app"</span>
                   </div>
                 </li>
                 <li className="flex gap-3">
                   <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center">6</span>
                   <div>
-                    <span className="text-on-surface font-medium">Download the JSON file</span>
+                    <span className="text-on-surface font-medium">Create OAuth 2.0 credentials</span>
                     <br />
-                    <span className="text-xs">Click the download button (⬇️) next to your new credentials</span>
+                    <span className="text-xs">
+                      Go to "APIs & Services" → "Credentials" → "Create Credentials" → "OAuth client ID" → select <strong className="text-on-surface">"Desktop app"</strong> as the application type
+                    </span>
+                  </div>
+                </li>
+                <li className="flex gap-3">
+                  <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center">7</span>
+                  <div>
+                    <span className="text-on-surface font-medium">Download the JSON credentials file</span>
+                    <br />
+                    <span className="text-xs">Click the download button (⬇️) next to your new OAuth client credentials</span>
                   </div>
                 </li>
               </ol>
@@ -153,8 +138,8 @@ function SetupWizard({
           </div>
         )}
 
-        {/* Step 3: Paste JSON */}
-        {step === 3 && (
+        {/* Step 2: Paste JSON */}
+        {step === 2 && (
           <div className="space-y-4">
             <div className="bg-surface-container-low rounded-lg p-4 border border-white/5">
               <h3 className="text-sm font-bold text-on-surface mb-2 flex items-center gap-2">
@@ -182,8 +167,8 @@ function SetupWizard({
           </div>
         )}
 
-        {/* Step 4: Confirm */}
-        {step === 4 && (
+        {/* Step 3: Confirm */}
+        {step === 3 && (
           <div className="space-y-4">
             <div className="bg-surface-container-low rounded-lg p-4 border border-white/5">
               <h3 className="text-sm font-bold text-on-surface mb-3 flex items-center gap-2">
@@ -191,10 +176,6 @@ function SetupWizard({
                 Ready to create
               </h3>
               <div className="space-y-3">
-                <div className="flex items-center gap-3">
-                  <span className="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold w-24">Name</span>
-                  <span className="text-sm text-on-surface font-medium">{name}</span>
-                </div>
                 <div className="flex items-center gap-3">
                   <span className="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold w-24">Credentials</span>
                   <span className="text-sm text-emerald-400 flex items-center gap-1">
@@ -204,8 +185,7 @@ function SetupWizard({
                 </div>
               </div>
               <p className="text-xs text-on-surface-variant mt-4">
-                After creating the account, you'll need to authorize it by signing in with your Google account.
-                This will open a new browser tab.
+                After creating the account, sign in with Google to finish authorization. Vod2Tube will pull the YouTube channel name automatically.
               </p>
             </div>
 
@@ -230,10 +210,7 @@ function SetupWizard({
             {step < totalSteps ? (
               <button
                 onClick={() => setStep(s => s + 1)}
-                disabled={
-                  (step === 1 && !name.trim()) ||
-                  (step === 3 && !json.trim())
-                }
+                disabled={step === 2 && !json.trim()}
                 className="px-6 py-2 rounded-lg text-sm font-bold bg-gradient-to-br from-primary to-primary-container text-on-primary-container hover:opacity-90 disabled:opacity-40 transition-all shadow-lg shadow-primary/10"
               >
                 Continue
@@ -358,7 +335,7 @@ function AccountRow({
         <div className="absolute bottom-2 left-2 flex items-center gap-1.5">
           <span className={`w-2 h-2 rounded-full ${account.isAuthorized ? 'bg-emerald-500' : 'bg-tertiary'}`} />
           <span className="text-[10px] font-bold text-white uppercase tracking-tighter">
-            {account.isAuthorized ? 'Connected' : 'Not Linked'}
+            {account.isAuthorized ? 'Ready to upload' : 'Authorization needed'}
           </span>
         </div>
       </div>
@@ -376,7 +353,7 @@ function AccountRow({
           )}
           {!account.isAuthorized && (
             <span className="px-2 py-0.5 bg-tertiary/10 text-tertiary text-[10px] font-black rounded uppercase">
-              Needs Auth
+              Sign-In Needed
             </span>
           )}
         </div>
@@ -384,6 +361,12 @@ function AccountRow({
           <p className="text-sm text-primary mb-1 flex items-center gap-1">
             <span className="material-symbols-outlined text-sm">smart_display</span>
             {account.channelTitle}
+          </p>
+        )}
+        {!account.channelTitle && !account.isAuthorized && (
+          <p className="text-sm text-on-surface-variant mb-1 flex items-center gap-1">
+            <span className="material-symbols-outlined text-sm">hourglass_top</span>
+            Channel name will appear after authorization
           </p>
         )}
         <p className="text-sm text-on-surface-variant mb-3">
@@ -472,8 +455,8 @@ export default function AccountsPage() {
     return () => window.removeEventListener('message', handleMessage);
   }, [load]);
 
-  async function handleCreate(name: string, json: string) {
-    await accountsApi.create(name, json);
+  async function handleCreate(json: string) {
+    await accountsApi.create(json);
     setShowWizard(false);
     await load();
   }
@@ -513,7 +496,7 @@ export default function AccountsPage() {
         <div>
           <h1 className="text-3xl font-black tracking-tight text-on-surface mb-2">YouTube Accounts</h1>
           <p className="text-on-surface-variant max-w-md">
-            Manage YouTube accounts for uploading VODs. Each channel can upload to a different account.
+            Connect the YouTube accounts that receive finished uploads from your Twitch channels.
           </p>
         </div>
         <div className="flex gap-3">
@@ -581,7 +564,7 @@ export default function AccountsPage() {
             <p className="text-3xl font-black text-on-surface">{accounts.length}</p>
           </div>
           <div className="bg-surface-container-low p-6 rounded-xl border border-white/5">
-            <p className="text-[10px] text-outline uppercase font-black tracking-widest mb-1">Pending Auth</p>
+            <p className="text-[10px] text-outline uppercase font-black tracking-widest mb-1">Need Sign-In</p>
             <p className="text-3xl font-black text-tertiary">{accounts.length - authorizedCount}</p>
           </div>
         </div>
