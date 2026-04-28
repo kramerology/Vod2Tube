@@ -172,6 +172,7 @@ namespace Vod2Tube.Application.Services
             // Reset upload-related state so that a retry starts a fresh upload.
             job.YoutubeVideoId = string.Empty;
             job.ResumableUploadUri = string.Empty;
+            job.UploadedAtUTC = null;
             await _dbContext.SaveChangesAsync();
             _logger.LogInformation("Retried VOD {VodId} — reset to Pending", vodId);
             return true;
@@ -350,6 +351,7 @@ namespace Vod2Tube.Application.Services
                     job.FinalVideoFilePath = string.Empty;
                     job.YoutubeVideoId = string.Empty;
                     job.ResumableUploadUri = string.Empty;
+                    job.UploadedAtUTC = null;
                     job.ArchivedVodPath = string.Empty;
                     job.ArchivedChatJsonPath = string.Empty;
                     job.ArchivedChatRenderPath = string.Empty;
@@ -362,6 +364,7 @@ namespace Vod2Tube.Application.Services
                     job.FinalVideoFilePath = string.Empty;
                     job.YoutubeVideoId = string.Empty;
                     job.ResumableUploadUri = string.Empty;
+                    job.UploadedAtUTC = null;
                     job.ArchivedChatJsonPath = string.Empty;
                     job.ArchivedChatRenderPath = string.Empty;
                     job.ArchivedFinalVideoPath = string.Empty;
@@ -372,6 +375,7 @@ namespace Vod2Tube.Application.Services
                     job.FinalVideoFilePath = string.Empty;
                     job.YoutubeVideoId = string.Empty;
                     job.ResumableUploadUri = string.Empty;
+                    job.UploadedAtUTC = null;
                     job.ArchivedChatRenderPath = string.Empty;
                     job.ArchivedFinalVideoPath = string.Empty;
                     break;
@@ -380,6 +384,7 @@ namespace Vod2Tube.Application.Services
                     job.FinalVideoFilePath = string.Empty;
                     job.YoutubeVideoId = string.Empty;
                     job.ResumableUploadUri = string.Empty;
+                    job.UploadedAtUTC = null;
                     job.ArchivedFinalVideoPath = string.Empty;
                     break;
                 case RetryStageKeys.Archive:

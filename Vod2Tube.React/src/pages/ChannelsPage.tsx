@@ -16,11 +16,29 @@ function queueStateTone(channel: ChannelQueueStatus): string {
   return 'text-on-surface-variant';
 }
 
-function formatQueueCheck(iso: string | null): string {
-  if (!iso) return 'Never checked';
-  return `Checked ${new Date(iso).toLocaleString('en-US', {
-    month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
-  })}`;
+function formatRelativeTime(iso: string | null): string {
+  if (!iso) return 'No uploads yet';
+
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return 'No uploads yet';
+
+  const diffMs = Date.now() - then;
+  const minute = 60 * 1000;
+  const hour = 60 * minute;
+  const day = 24 * hour;
+
+  if (diffMs < hour) {
+    const minutes = Math.max(1, Math.floor(diffMs / minute));
+    return `${minutes} minute${minutes === 1 ? '' : 's'} ago`;
+  }
+
+  if (diffMs < day) {
+    const hours = Math.floor(diffMs / hour);
+    return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+  }
+
+  const days = Math.floor(diffMs / day);
+  return `${days} day${days === 1 ? '' : 's'} ago`;
 }
 
 // ── Add / Edit dialog ─────────────────────────────────────────────────────────
@@ -150,10 +168,6 @@ function ChannelRow({
   onQueueNext: () => void;
   onDelete: () => void;
 }) {
-  const added = new Date(channel.addedAtUTC).toLocaleDateString('en-US', {
-    month: 'short', day: 'numeric', year: 'numeric',
-  });
-
   return (
     <div
       className={`bg-surface-container-low group hover:bg-surface-container transition-all duration-300 rounded-xl p-4 flex items-center gap-6 ${
@@ -178,7 +192,7 @@ function ChannelRow({
         <div className="absolute bottom-2 left-2 flex items-center gap-1.5">
           <span className={`w-2 h-2 rounded-full ${channel.active ? 'bg-primary' : 'bg-outline'}`} />
           <span className="text-[10px] font-bold text-white uppercase tracking-tighter">
-            {channel.active ? 'Live Edge' : 'Standby'}
+            {channel.active ? 'Monitoring' : 'Paused'}
           </span>
         </div>
       </div>
@@ -200,25 +214,24 @@ function ChannelRow({
             </span>
           )}
         </div>
-        <p className="text-sm text-on-surface-variant mb-1">
-          One VOD is fetched only when needed, oldest first. Added {added}.
-        </p>
         <p className={`text-xs mb-2 flex items-center gap-1 ${queueStateTone(channel)}`}>
           <span className="material-symbols-outlined text-xs">hourglass_top</span>
           {queueStateLabel(channel)}
         </p>
-        {channel.currentVodId ? (
-          <p className="text-xs text-on-surface-variant/70 mb-2 flex items-center gap-1">
-            <span className="material-symbols-outlined text-xs">movie</span>
-            {channel.currentVodTitle || channel.currentVodId}
-          </p>
-        ) : channel.lastQueuedVodId ? (
-          <p className="text-xs text-on-surface-variant/70 mb-2 flex items-center gap-1">
-            <span className="material-symbols-outlined text-xs">history</span>
-            Last queued: {channel.lastQueuedVodId}
-          </p>
-        ) : null}
-        <p className="text-[11px] text-on-surface-variant/60 mb-2">{formatQueueCheck(channel.lastQueueCheckAtUTC)}</p>
+        <div className="grid grid-cols-3 gap-3 mb-3">
+          <div className="rounded-lg bg-surface/60 border border-white/5 px-3 py-2">
+            <p className="text-[10px] uppercase tracking-widest text-on-surface-variant/70">Downloaded</p>
+            <p className="mt-1 text-lg font-bold text-on-surface">{channel.totalVodsDownloaded}</p>
+          </div>
+          <div className="rounded-lg bg-surface/60 border border-white/5 px-3 py-2">
+            <p className="text-[10px] uppercase tracking-widest text-on-surface-variant/70">Uploaded</p>
+            <p className="mt-1 text-lg font-bold text-on-surface">{channel.totalVodsUploaded}</p>
+          </div>
+          <div className="rounded-lg bg-surface/60 border border-white/5 px-3 py-2">
+            <p className="text-[10px] uppercase tracking-widest text-on-surface-variant/70">Last Upload</p>
+            <p className="mt-1 text-sm font-semibold text-on-surface leading-tight">{formatRelativeTime(channel.lastUploadedAtUTC)}</p>
+          </div>
+        </div>
         {accountName && (
           <p className="text-xs text-primary/80 mb-2 flex items-center gap-1">
             <span className="material-symbols-outlined text-xs">smart_display</span>
@@ -334,16 +347,12 @@ export default function ChannelsPage() {
       {/* Header */}
       <div className="flex items-end justify-between mb-10">
         <div>
-          <h1 className="text-3xl font-black tracking-tight text-on-surface mb-2">Channel Matrix</h1>
+          <h1 className="text-3xl font-black tracking-tight text-on-surface mb-2">Channels</h1>
           <p className="text-on-surface-variant max-w-md">
-            Each channel now fetches only one VOD at a time, always starting with the oldest unprocessed archive.
+            Choose which Twitch channels to monitor and where each completed VOD should upload.
           </p>
         </div>
         <div className="flex gap-3">
-          <button className="px-4 py-2 bg-surface-container-highest text-on-surface text-sm font-semibold rounded-lg hover:bg-surface-bright transition-colors flex items-center gap-2">
-            <span className="material-symbols-outlined text-sm">filter_list</span>
-            Filter
-          </button>
           <button
             onClick={() => setDialog({ active: true })}
             className="px-4 py-2 bg-gradient-to-br from-primary to-primary-container text-on-primary-container text-sm font-bold rounded-lg hover:brightness-110 transition-all flex items-center gap-2 shadow-lg shadow-primary/10"
@@ -414,10 +423,10 @@ export default function ChannelsPage() {
             <p className="text-3xl font-black text-on-surface">{channels.length - activeCount}</p>
           </div>
           <div className="bg-surface-container-low p-6 rounded-xl border border-white/5">
-            <p className="text-[10px] text-outline uppercase font-black tracking-widest mb-1">Channels Waiting</p>
+            <p className="text-[10px] text-outline uppercase font-black tracking-widest mb-1">Ready For Next VOD</p>
             <div className="flex items-center gap-2 mt-2">
               <span className="text-3xl font-black text-on-surface">{channels.filter(c => c.active && !c.currentVodId).length}</span>
-              <span className="text-xs font-bold text-on-surface-variant/70">ready</span>
+              <span className="text-xs font-bold text-on-surface-variant/70">channels</span>
             </div>
           </div>
         </div>

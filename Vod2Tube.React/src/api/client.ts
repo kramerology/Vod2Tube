@@ -35,6 +35,9 @@ export interface ChannelQueueStatus extends Channel {
   currentStage: string | null;
   currentJobFailed: boolean;
   currentJobPaused: boolean;
+  totalVodsDownloaded: number;
+  totalVodsUploaded: number;
+  lastUploadedAtUTC: string | null;
 }
 
 export interface PipelineJob {
@@ -109,10 +112,10 @@ export const accountsApi = {
 
   get: (id: number) => request<YouTubeAccount>(`/accounts/${id}`),
 
-  create: (name: string, clientSecretsJson: string) =>
+  create: (clientSecretsJson: string) =>
     request<YouTubeAccount>('/accounts', {
       method: 'POST',
-      body: JSON.stringify({ name, clientSecretsJson }),
+      body: JSON.stringify({ clientSecretsJson }),
     }),
 
   update: (id: number, name: string) =>

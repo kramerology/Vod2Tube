@@ -55,9 +55,56 @@ namespace Vod2Tube.Application.Services
                         .First(),
                     StringComparer.OrdinalIgnoreCase);
 
+            var pipelineStatsByChannel = await _dbContext.Pipelines
+                .AsNoTracking()
+                .Join(
+                    _dbContext.TwitchVods.AsNoTracking(),
+                    pipeline => pipeline.VodId,
+                    vod => vod.Id,
+                    (pipeline, vod) => new
+                    {
+                        vod.ChannelName,
+                        pipeline.Stage,
+                        pipeline.VodFilePath,
+                        pipeline.ChatTextFilePath,
+                        pipeline.ChatVideoFilePath,
+                        pipeline.FinalVideoFilePath,
+                        pipeline.ArchivedVodPath,
+                        pipeline.ArchivedChatJsonPath,
+                        pipeline.ArchivedChatRenderPath,
+                        pipeline.ArchivedFinalVideoPath,
+                        pipeline.UploadedAtUTC,
+                    })
+                .Where(x => activeChannelNames.Contains(x.ChannelName))
+                .GroupBy(x => x.ChannelName)
+                .Select(group => new
+                {
+                    ChannelName = group.Key,
+                    TotalVodsDownloaded = group.Count(x =>
+                        x.Stage == "PendingDownloadChat"
+                        || x.Stage == "DownloadingChat"
+                        || x.Stage == "PendingRenderingChat"
+                        || x.Stage == "RenderingChat"
+                        || x.Stage == "PendingCombining"
+                        || x.Stage == "Combining"
+                        || x.Stage == "PendingUpload"
+                        || x.Stage == "Uploading"
+                        || x.Stage == "PendingArchiving"
+                        || x.Stage == "Archiving"
+                        || x.Stage == "Uploaded"
+                        || x.VodFilePath != string.Empty
+                        || x.ArchivedVodPath != string.Empty),
+                    TotalVodsUploaded = group.Count(x => x.Stage == "Uploaded" && x.UploadedAtUTC != null),
+                    LastUploadedAtUTC = group
+                        .Where(x => x.Stage == "Uploaded" && x.UploadedAtUTC != null)
+                        .Max(x => x.UploadedAtUTC),
+                })
+                .ToDictionaryAsync(x => x.ChannelName, StringComparer.OrdinalIgnoreCase);
+
             return channels.Select(channel =>
             {
                 var currentJob = currentJobsByChannel.GetValueOrDefault(channel.ChannelName);
+                var stats = pipelineStatsByChannel.GetValueOrDefault(channel.ChannelName);
                 return new ChannelQueueStatusDto
                 {
                     Id = channel.Id,
@@ -72,6 +119,9 @@ namespace Vod2Tube.Application.Services
                     CurrentStage = currentJob?.Stage,
                     CurrentJobFailed = currentJob?.Failed ?? false,
                     CurrentJobPaused = currentJob?.Paused ?? false,
+                    TotalVodsDownloaded = stats?.TotalVodsDownloaded ?? 0,
+                    TotalVodsUploaded = stats?.TotalVodsUploaded ?? 0,
+                    LastUploadedAtUTC = stats?.LastUploadedAtUTC,
                 };
             }).ToList();
         }

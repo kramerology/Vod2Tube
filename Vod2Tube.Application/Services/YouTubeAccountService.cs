@@ -25,6 +25,8 @@ namespace Vod2Tube.Application.Services
             "YouTubeCredentials",
             "accounts");
 
+        private const string PendingAuthorizationName = "Pending authorization";
+
         // In-memory map used to correlate OAuth callbacks to account IDs.
         // The key is the OAuth state parameter, the value is the account ID.
         private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, int> PendingAuthStates = new();
@@ -37,7 +39,11 @@ namespace Vod2Tube.Application.Services
         // ── CRUD ──────────────────────────────────────────────────────────────
         public async Task<List<YouTubeAccount>> GetAllAsync()
         {
-            var accounts = await _dbContext.YouTubeAccounts.OrderBy(a => a.Name).ToListAsync();
+            var accounts = await _dbContext.YouTubeAccounts
+                .OrderBy(a => a.ChannelTitle == string.Empty ? 1 : 0)
+                .ThenBy(a => a.ChannelTitle == string.Empty ? a.AddedAtUTC : DateTime.MinValue)
+                .ThenBy(a => a.Name)
+                .ToListAsync();
             // Augment with token-file-based authorization status
             return accounts;
         }
@@ -47,7 +53,7 @@ namespace Vod2Tube.Application.Services
             return await _dbContext.YouTubeAccounts.FindAsync(id);
         }
 
-        public async Task<YouTubeAccount> CreateAsync(string name, string clientSecretsJson)
+        public async Task<YouTubeAccount> CreateAsync(string clientSecretsJson)
         {
             // Validate that the JSON is parseable as Google client secrets
             try
@@ -62,7 +68,7 @@ namespace Vod2Tube.Application.Services
 
             var account = new YouTubeAccount
             {
-                Name = name.Trim(),
+                Name = PendingAuthorizationName,
                 ClientSecretsJson = clientSecretsJson,
                 AddedAtUTC = DateTime.UtcNow
             };
@@ -112,8 +118,20 @@ namespace Vod2Tube.Application.Services
             var tokenStorePath = Path.Combine(AccountsRootDir, accountId.ToString(), "token_store");
             if (!Directory.Exists(tokenStorePath)) return false;
 
-            // FileDataStore stores tokens as files; check if any exist
-            return Directory.EnumerateFiles(tokenStorePath).Any();
+            // FileDataStore stores tokens with the key "user" - check if that specific file exists
+            // The file is typically stored as "GoogleWebAuthorizationBroker+user" or similar
+            try
+            {
+                var tokenStore = new FileDataStore(tokenStorePath, fullPath: true);
+                // Try to retrieve the token - if it exists and is valid, this will succeed
+                var token = tokenStore.GetAsync<TokenResponse>("user").GetAwaiter().GetResult();
+                return token != null;
+            }
+            catch
+            {
+                // If we can't read the token, treat as unauthorized
+                return false;
+            }
         }
 
         // ── OAuth flow ────────────────────────────────────────────────────────
@@ -191,7 +209,12 @@ namespace Vod2Tube.Application.Services
 
                     if (channelsResponse.Items?.Count > 0)
                     {
-                        account.ChannelTitle = channelsResponse.Items[0].Snippet.Title;
+                        var channelTitle = channelsResponse.Items[0].Snippet.Title?.Trim() ?? string.Empty;
+                        account.ChannelTitle = channelTitle;
+                        if (!string.IsNullOrWhiteSpace(channelTitle))
+                        {
+                            account.Name = channelTitle;
+                        }
                         await _dbContext.SaveChangesAsync();
                     }
                 }

@@ -42,7 +42,7 @@ public class AccountsController(YouTubeAccountService accountSvc) : ControllerBa
     {
         try
         {
-            var account = await accountSvc.CreateAsync(req.Name, req.ClientSecretsJson);
+            var account = await accountSvc.CreateAsync(req.ClientSecretsJson);
             return Results.Created($"/api/accounts/{account.Id}", new
             {
                 account.Id,
@@ -143,5 +143,5 @@ public class AccountsController(YouTubeAccountService accountSvc) : ControllerBa
     }
 }
 
-public record CreateAccountRequest(string Name, string ClientSecretsJson);
+public record CreateAccountRequest(string ClientSecretsJson);
 public record UpdateAccountRequest(string Name);

@@ -227,6 +227,7 @@ namespace Vod2Tube.Application
             {
                 pipeline.YoutubeVideoId = uploadedVideoId;
                 pipeline.ResumableUploadUri = string.Empty;
+                pipeline.UploadedAtUTC = DateTime.UtcNow;
                 await _dbContext.SaveChangesAsync(ct);
             }
 

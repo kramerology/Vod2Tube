@@ -259,8 +259,8 @@ export default function VodsPage() {
       <div className="flex flex-col gap-6 mb-10">
         <div className="flex justify-between items-end">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight text-on-surface mb-1">Queue Manager</h1>
-            <p className="text-on-surface-variant text-sm">One VOD per channel is fetched only when needed, with the oldest unprocessed archive queued first.</p>
+            <h1 className="text-3xl font-bold tracking-tight text-on-surface mb-1">VOD Pipeline</h1>
+            <p className="text-on-surface-variant text-sm">Track each Twitch VOD as it moves through download, chat rendering, and upload.</p>
           </div>
         </div>
 
@@ -281,11 +281,6 @@ export default function VodsPage() {
               {f.label}{counts[f.key] > 0 && ` (${counts[f.key]})`}
             </button>
           ))}
-          <div className="h-4 w-px bg-outline-variant/30 mx-2" />
-          <button className="text-on-surface-variant text-xs flex items-center gap-1 hover:text-on-surface">
-            <span className="material-symbols-outlined text-sm">filter_list</span>
-            More Filters
-          </button>
         </div>
       </div>
 

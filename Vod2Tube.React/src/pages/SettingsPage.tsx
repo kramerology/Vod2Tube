@@ -748,7 +748,7 @@ export default function SettingsPage() {
       <div className="mb-8 flex items-start justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-on-surface mb-1">Settings</h1>
-          <p className="text-on-surface-variant text-sm">Configure Vod2Tube behaviour</p>
+          <p className="text-on-surface-variant text-sm">Configure the tools, folders, and rendering options used by the Twitch-to-YouTube pipeline.</p>
         </div>
         <button
           onClick={handleSave}
