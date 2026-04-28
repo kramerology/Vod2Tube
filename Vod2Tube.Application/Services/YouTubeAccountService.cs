@@ -118,18 +118,15 @@ namespace Vod2Tube.Application.Services
             var tokenStorePath = Path.Combine(AccountsRootDir, accountId.ToString(), "token_store");
             if (!Directory.Exists(tokenStorePath)) return false;
 
-            // FileDataStore stores tokens with the key "user" - check if that specific file exists
-            // The file is typically stored as "GoogleWebAuthorizationBroker+user" or similar
+            // FileDataStore stores tokens on disk using the key name as part of the file name.
+            // For the authorization flow in this service, the key is "user".
             try
             {
-                var tokenStore = new FileDataStore(tokenStorePath, fullPath: true);
-                // Try to retrieve the token - if it exists and is valid, this will succeed
-                var token = tokenStore.GetAsync<TokenResponse>("user").GetAwaiter().GetResult();
-                return token != null;
+                return Directory.EnumerateFiles(tokenStorePath, "*user*", SearchOption.TopDirectoryOnly).Any();
             }
             catch
             {
-                // If we can't read the token, treat as unauthorized
+                // If we can't inspect the token store, treat as unauthorized
                 return false;
             }
         }
